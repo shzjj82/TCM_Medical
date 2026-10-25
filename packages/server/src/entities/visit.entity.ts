@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { Patient } from './patient.entity';
 
 /**
@@ -19,7 +19,17 @@ export class Visit {
   @Column({ name: 'external_patient_id', nullable: true })
   externalPatientId?: string;
 
+  /**
+   * 外键列。必须显式声明：QueryBuilder 是按「实体属性」解析的，
+   * 只写 @ManyToOne 而不声明 patientId，会导致 `v.patientId = :pid` 找不到属性而抛错
+   * （病人详情接口正是因此一直 500）。
+   * 列名沿用 TypeORM 默认生成的 patientId，与现有库表一致，不会触发改表。
+   */
+  @Column({ type: 'uuid', nullable: true })
+  patientId?: string;
+
   @ManyToOne(() => Patient, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'patientId' })
   patient?: Patient;
 
   @Column({ name: 'visit_no', type: 'int' })

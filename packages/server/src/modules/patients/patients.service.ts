@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from '../../entities/patient.entity';
-import { normalizeDate, pick, toArray } from '../../common/payload';
+import { isUuid, normalizeDate, pick, toArray } from '../../common/payload';
 
 export interface ListPatientsParams {
   status?: string;
@@ -28,22 +28,40 @@ export class PatientsService {
     return qb.getMany();
   }
 
-  /** 同时支持 uuid、Skill 侧 external_id 与姓名模糊查找。 */
+  /** 同时支持 uuid、Skill 侧 external_id 与姓名查找。 */
   async findOne(key: string): Promise<Patient> {
-    const found = await this.repo
-      .createQueryBuilder('p')
-      .where('p.id = :key OR p.externalId = :key OR p.name = :key', { key })
-      .getOne();
+    const qb = this.repo.createQueryBuilder('p');
+    // 两个坑必须同时避开：
+    // 1) id 是 uuid 列，非 uuid 的 key（姓名、P-2026-001）不能直接参与 id 比较，
+    //    否则 PostgreSQL 抛 invalid input syntax for type uuid。
+    // 2) 即便 key 是合法 uuid，也不能让 uuid 列与 varchar 列共用同一个占位符 ——
+    //    PG 会按首次出现把参数推断成 uuid，随后 external_id/name 比较即报
+    //    「operator does not exist: character varying = uuid」。故拆成独立占位符。
+    if (isUuid(key)) {
+      qb.where('p.id = :uuidKey', { uuidKey: key })
+        .orWhere('p.externalId = :key', { key })
+        .orWhere('p.name = :key', { key });
+    } else {
+      qb.where('p.externalId = :key OR p.name = :key', { key });
+    }
+    const found = await qb.getOne();
     if (!found) throw new NotFoundException(`病人不存在: ${key}`);
     return found;
   }
 
   /** 幂等同步：externalId 命中则更新，否则新建。 */
   async sync(payload: Record<string, any>): Promise<Patient> {
-    const externalId = pick<string>(payload, ['externalId', 'external_id', 'id']);
+    // payload 里的 id 有可能是 Skill 侧外部 ID（P-2026-001），也有可能是数据库 uuid，
+    // 必须先区分：把外部 ID 或空串送进 uuid 列会让 PostgreSQL 抛类型错误（原实现正是如此）。
+    const rawId = pick<string>(payload, ['externalId', 'external_id', 'id']);
+    const externalId = rawId && !isUuid(rawId) ? rawId : undefined;
+    const uuid = isUuid(rawId) ? rawId : pick<string>(payload, ['uuid']);
+
     const found = externalId
       ? await this.repo.findOne({ where: { externalId } })
-      : await this.repo.findOne({ where: { id: pick<string>(payload, ['uuid']) ?? '' } });
+      : isUuid(uuid)
+        ? await this.repo.findOne({ where: { id: uuid } })
+        : undefined;
 
     const initial = pick(payload, ['initialCondition', 'initial_condition']) ?? {};
     const current = pick(payload, ['currentCondition', 'current_condition']) ?? initial;

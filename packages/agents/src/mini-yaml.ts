@@ -26,6 +26,17 @@ function parseLines(src: string): Line[] {
 function scalar(value: string): YamlValue {
   const trimmed = value.replace(/\s+#.*$/, '').trim();
   if (trimmed === '' || trimmed === 'null' || trimmed === '~') return '';
+  // 内联流序列：args: ["--json", "--file"]。
+  // 不解析的话整串会变成一个字符串，导致 tools[].args 匹配不上任何参数，
+  // 调用时所有 --xxx 都被丢弃。
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (!inner) return [];
+    return inner
+      .split(',')
+      .map((item) => scalar(item))
+      .filter((item) => item !== '');
+  }
   const unquoted = trimmed.replace(/^['"]|['"]$/g, '');
   if (unquoted === 'true') return 'true';
   if (unquoted === 'false') return 'false';
@@ -95,15 +106,24 @@ function parseList(lines: Line[], start: number, indent: number): [YamlValue[], 
     const inline = line.text.replace(/^-\s*/, '');
     const sep = inline.indexOf(':');
     if (sep > 0) {
-      // list item 本身是一个 map，把该行当作 map 的第一行
-      const virtual: Line[] = [
-        { indent: line.indent, text: inline },
-        ...lines.slice(i + 1).filter((l) => l.indent > line.indent),
-      ];
-      const [map] = parseMap(virtual, 0, line.indent);
-      // 跳过属于该 map 的后续行
+      // list item 本身是一个 map，把该行当作 map 的第一行。
+      //
+      // 关键：`- name: x` 之后同组的 command / description / args 缩进会比 `-` 更深，
+      // 若直接用 `-` 的缩进作为基准，parseMap 会把它们当成「更深的层级」整体跳过，
+      // 结果只剩 name、其余字段全丢（tools[].command 变成空串，Skill 永远调不起来）。
+      // 因此这里把首行对齐到后续行的最小缩进，让它们成为同级 key。
+      // 只收集「属于本列表项」的后续行：一旦遇到缩进回落的下一个 `-` 项就停止。
+      // 若不过界，后面所有条目的 command/args 会被吞进同一个 map，后出现的键覆盖先出现的，
+      // 结果 8 个工具全都变成最后一个的 command/args。
+      const rest: Line[] = [];
       let j = i + 1;
-      while (j < lines.length && lines[j].indent > line.indent) j += 1;
+      while (j < lines.length && lines[j].indent > line.indent) {
+        rest.push(lines[j]);
+        j += 1;
+      }
+      const base = rest.length ? Math.min(...rest.map((l) => l.indent)) : line.indent;
+      const virtual: Line[] = [{ indent: base, text: inline }, ...rest];
+      const [map] = parseMap(virtual, 0, base);
       list.push(map);
       i = j;
       continue;

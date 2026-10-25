@@ -293,8 +293,8 @@ def cmd_advise(args) -> None:
     print(f"\n【随访】{plan.get('followup_plan') or '-'}")
     ev = plan.get("evidence_summary") or {}
     print(f"\n【证据来源】外部 {len(ev.get('external_hits') or [])} 条 · 内部 {len(ev.get('internal_hits') or [])} 条 · 医案 {len(ev.get('case_hits') or [])} 条")
-    print(f"置信度 {plan.get('confidence')}　待 {
-          '、'.join(ev.get('insufficient_fields') or []) or '无'}")
+    insufficient = '、'.join(ev.get('insufficient_fields') or []) or '无'
+    print(f"置信度 {plan.get('confidence')}　待 {insufficient}")
     print("\n" + res["disclaimer"])
 
 

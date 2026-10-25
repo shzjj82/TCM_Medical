@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from '../../entities/patient.entity';
 import { Visit } from '../../entities/visit.entity';
-import { normalizeDate, pick, toArray } from '../../common/payload';
+import { isUuid, normalizeDate, pick, toArray } from '../../common/payload';
 
 @Injectable()
 export class VisitsService {
@@ -13,10 +13,19 @@ export class VisitsService {
   ) {}
 
   async listForPatient(patientKey: string): Promise<Visit[]> {
-    const patient = await this.patients
-      .createQueryBuilder('p')
-      .where('p.id = :key OR p.externalId = :key', { key: patientKey })
-      .getOne();
+    // 与 patients.service 保持一致：uuid 列只在 key 是合法 uuid 时才参与比较，
+    // 否则用姓名或 P-2026-001 这类外部 ID 查询会让 PostgreSQL 抛类型错误。
+    const pqb = this.patients.createQueryBuilder('p');
+    if (isUuid(patientKey)) {
+      // 同 patients.service：uuid 列与 varchar 列要用独立占位符，
+      // 否则 PG 把参数推断成 uuid 后，external_id/name 的比较会报类型不匹配。
+      pqb.where('p.id = :uuidKey', { uuidKey: patientKey })
+        .orWhere('p.externalId = :key', { key: patientKey })
+        .orWhere('p.name = :key', { key: patientKey });
+    } else {
+      pqb.where('p.externalId = :key OR p.name = :key', { key: patientKey });
+    }
+    const patient = await pqb.getOne();
     const qb = this.repo.createQueryBuilder('v');
     if (patient) qb.where('v.patientId = :pid', { pid: patient.id })
       .orWhere('v.externalPatientId = :ext', { ext: patient.externalId ?? '' });

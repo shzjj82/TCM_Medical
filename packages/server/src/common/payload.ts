@@ -24,6 +24,20 @@ export function toArray(value: unknown): string[] {
   return [];
 }
 
+/**
+ * 判断字符串是否是合法 UUID。
+ *
+ * 必须用它在查询前兜一道：`patients.id` 是 uuid 列，把姓名或 `P-2026-001` 这类
+ * 外部 ID 直接塞进 `WHERE id = ?` 会让 PostgreSQL 抛
+ * `invalid input syntax for type uuid`，整个请求 500。
+ */
+export function isUuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  );
+}
+
 export function toKeywords(input: string): string[] {
   return Array.from(
     new Set(
