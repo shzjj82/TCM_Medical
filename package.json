@@ -1,0 +1,27 @@
+{
+  "name": "tcm-medical",
+  "version": "0.1.0",
+  "private": true,
+  "description": "中医诊所医案沉淀平台：SCRM 病案 / 医生医案结构化 / 内部治疗资料库 / 外部参考库 / AI 治疗建议",
+  "packageManager": "pnpm@9.12.2",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:web": "pnpm --filter @tcm/web dev",
+    "dev:server": "pnpm --filter @tcm/server dev",
+    "build": "pnpm --filter @tcm/agents build && pnpm --filter @tcm/server build && pnpm --filter @tcm/web build",
+    "build:web": "pnpm --filter @tcm/web build",
+    "build:server": "pnpm --filter @tcm/server build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "skill": "python3 skills/tcm-medical-case/scripts/tcm.py",
+    "skill:sync": "python3 skills/tcm-medical-case/scripts/sync_to_server.py",
+    "db:typeorm": "pnpm --filter @tcm/server typeorm"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

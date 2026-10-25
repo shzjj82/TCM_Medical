@@ -1,0 +1,139 @@
+# Skill 机器可读元数据，供 packages/agents 的 SkillRegistry 加载并注册为 LLM tool
+id: tcm-medical-case
+name: 中医诊所医案沉淀
+version: 1.0.0
+entry: SKILL.md
+runtime:
+  type: python
+  bin: python3
+  entrypoint: scripts/tcm.py
+  requires: []            # 零第三方依赖，仅标准库
+  python: ">=3.9"
+
+# ---- 触发配置 ----
+triggers:
+  keywords:
+    - 医案
+    - 病案
+    - 病例
+    - 接诊
+    - 建档
+    - 初诊
+    - 复诊
+    - 跟诊
+    - 诊疗记录
+    - 治疗跟进
+    - 上传病历
+    - 疗效对比
+    - 治疗总结
+    - 病例报告
+    - 教学文档
+    - 经验传承
+    - 内部资料库
+    - 外部参考库
+    - 参考资料录入
+    - 取穴建议
+    - 针灸方案
+    - 方剂推荐
+    - 中医治疗建议
+    - TCM case
+    - acupuncture record
+  negative_keywords:
+    - 采购
+    - 排班
+    - 收费
+    - 发票
+  intent_routes:
+    - intent: intake
+      when: "新病人建档/录入初始情况，尚无 patient_id"
+      command: intake
+    - intent: followup
+      when: "复诊跟进，含语音/图片/文字素材或医生描述"
+      command: followup
+    - intent: contrast
+      when: "查看期初→X次治疗→末期疗效对比"
+      command: summary
+    - intent: report
+      when: "生成疗效总结/年度或季度病例报告"
+      command: report
+    - intent: teach
+      when: "生成教学文档/内部治疗资料库"
+      command: teach
+    - intent: reference
+      when: "录入或查阅外部治疗参考资料（经方/古籍/指南/论文）"
+      command: ref
+    - intent: advise
+      when: "输入病人情况，检索内外部资料库给出治疗建议"
+      command: advise
+
+# ---- 暴露给 LLM 的工具（tools）----
+tools:
+  - name: tcm_intake
+    description: 建立病人 SCRM 档案，录入期初情况（主诉/诊断/舌脉/严重度），产出 patient_id
+    command: intake
+    args: ["--json", "--json-file", "--image", "--audio"]
+  - name: tcm_followup
+    description: 记录一次复诊跟进，支持语音录音/图片/文字输入，AI 解析为结构化医案并更新病人最新情况
+    command: followup
+    args: ["--patient", "--audio", "--image", "--text", "--doctor-note", "--severity", "--visit-date"]
+  - name: tcm_contrast_summary
+    description: 输出病人的「期初情况 → 经过 X 次治疗 → 末期情况」疗效对比数据
+    command: summary
+    args: ["--patient", "--format"]
+  - name: tcm_case_report
+    description: 跨病人汇总病症与医生描述，生成疗效总结报告
+    command: report
+    args: ["--scope", "--patient", "--period"]
+  - name: tcm_teaching_doc
+    description: 生成某病症/证型的教学文档，沉淀进内部治疗资料库
+    command: teach
+    args: ["--topic", "--level"]
+  - name: tcm_reference_add
+    description: 手动录入外部治疗参考资料（经方、古籍、指南、论文病例）到外部参考库
+    command: ref
+    args: ["add", "--json", "--file"]
+  - name: tcm_advise
+    description: 输入病人情况，联合外部参考库 + 内部资料库 + 本院高疗效医案，给出带引用来源的治疗建议
+    command: advise
+    args: ["--patient", "--text", "--top-k"]
+  - name: tcm_sync
+    description: 把本地沉淀的医案数据同步到 NestJS/PostgreSQL 服务端
+    command: sync
+    args: ["--server", "--token", "--patient"]
+
+# ---- 环境变量 ----
+env:
+  required: []
+  optional:
+    - DEEPSEEK_API_KEY
+    - DEEPSEEK_BASE_URL
+    - DEEPSEEK_MODEL
+    - DEEPSEEK_REASONER_MODEL
+    - ASR_PROVIDER
+    - ASR_API_KEY
+    - ASR_BASE_URL
+    - ASR_MODEL
+    - VISION_PROVIDER
+    - VISION_API_KEY
+    - VISION_BASE_URL
+    - VISION_MODEL
+    - TCM_SKILL_DATA_DIR
+    - TCM_SKILL_OUTPUT_DIR
+    - TCM_API_BASE_URL
+    - TCM_API_TOKEN
+
+# ---- 安全策略 ----
+policy:
+  must_cite_sources: true          # advise 输出必须带来源
+  immutable_initial_condition: true
+  ai_confidence_gate: 0.6          # 低于阈值标记 review_status: pending
+  emergency_redirect:              # 命中即刻转诊提示
+    - 胸痛剧烈
+    - 意识障碍
+    - 大出血
+    - 急腹症
+    - 疑似卒中
+    - 妊娠
+    - 十八反
+    - 十九畏
+  disclaimer: "本文内容由 AI 辅助生成，须经执业医师审核后使用，不得直接作为处方交付患者。"

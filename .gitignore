@@ -1,0 +1,35 @@
+# ---------- 依赖 ----------
+node_modules/
+.pnpm-store/
+.npm-cache/
+
+# ---------- 构建产物 ----------
+dist
+build
+coverage
+*.tsbuildinfo
+
+# ---------- 环境变量与密钥：严禁入库 ----------
+# .env 内含 DB_PASSWORD / JWT_SECRET / DEEPSEEK_API_KEY / ASR_API_KEY /
+# VISION_API_KEY / TCM_API_TOKEN 等真实凭据，只提交 .env.example 模板。
+.env
+.env.*
+!.env.example
+*.local
+
+# ---------- 本地 Agent 会话笔记 ----------
+# 含本机绝对路径与沙箱内部细节，不随仓库分发。
+.workbuddy/
+
+# ---------- Skill 运行时数据：严禁入库 ----------
+# 存放真实病人医案、疗效对比与知识库索引，属于业务数据与隐私数据。
+# 用 ** 匹配任意层级，避免 Skill 以 scripts/ 为 cwd 运行时把数据写进源码树。
+skills/**/data/
+skills/**/output/
+
+# ---------- 杂项 ----------
+.DS_Store
+*.log
+__pycache__
+*.pyc
+.venv
