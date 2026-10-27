@@ -1,188 +1,123 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Alert } from './ui/alert';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Input, Label } from './ui/input';
+import { Input } from './ui/input';
+import { buildCasePayload, CaseFields, EMPTY_CASE, FieldWrapper, splitList, type CaseFormState } from './CaseForm';
 import { api } from '../lib/api';
 
-interface Props {
-  onCreated?: () => void | Promise<void>;
-}
+interface Props { onCreated?: () => void | Promise<void>; }
 
-const EMPTY = {
-  name: '',
-  gender: '',
-  age: '',
-  phone: '',
-  chief_complaint: '',
-  western_diagnosis: '',
-  tcm_disease: '',
-  tcm_syndrome: '',
-  symptoms: '',
-  tongue: '',
-  pulse: '',
-  severity_score: '5',
-  tags: '',
-};
+const EMPTY_PATIENT = { name: '', gender: '', age: '', phone: '', tags: '' };
+
+type Mode = 'patient' | 'patient+case';
 
 /**
- * 建档表单。必填项用红色 * 标注、选填项用「选填」后缀明示——不允许把必填藏起来。
- * 提交走 Skill 的 intake 命令（与 AI 管线同一套逻辑），失败时回落到服务端 /patients/sync。
+ * 建档表单，两种模式：
+ * 1. 仅病患信息 —— 先建人，疾病信息（就诊档案）后续再补；
+ * 2. 病患 + 疾病信息 —— 一次填完，建档同时生成首份就诊档案。
+ * 必填项红色 * 标注、选填项「选填」后缀明示。
  */
 export function IntakeForm({ onCreated }: Props) {
-  const [form, setForm] = useState(EMPTY);
+  const [mode, setMode] = useState<Mode>('patient+case');
+  const [patient, setPatient] = useState(EMPTY_PATIENT);
+  const [caseForm, setCaseForm] = useState<CaseFormState>(EMPTY_CASE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const update = (key: keyof typeof EMPTY, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const updatePatient = (key: keyof typeof EMPTY_PATIENT, value: string) =>
+    setPatient((prev) => ({ ...prev, [key]: value }));
+  const updateCase = (key: keyof CaseFormState, value: string) =>
+    setCaseForm((prev) => ({ ...prev, [key]: value }));
 
   async function submit() {
-    setError(null);
-    setDone(null);
-    if (!form.name.trim()) return setError('请填写病人姓名');
-    if (!form.chief_complaint.trim()) return setError('请填写主诉（症状 + 时长）');
+    setError(null); setDone(null);
+    if (!patient.name.trim()) return setError('请填写病患姓名');
+    if (mode === 'patient+case' && !caseForm.chiefComplaint.trim()) {
+      return setError('当前模式需要填写主诉；如暂不填写疾病信息，请切换为「仅病患信息」');
+    }
     setSaving(true);
     try {
-      const payload = {
-        name: form.name.trim(),
-        gender: form.gender || undefined,
-        age: form.age ? Number(form.age) : undefined,
-        phone: form.phone || undefined,
-        chief_complaint: form.chief_complaint.trim(),
-        western_diagnosis: splitList(form.western_diagnosis),
-        tcm_disease: form.tcm_disease || undefined,
-        tcm_syndrome: form.tcm_syndrome || undefined,
-        symptoms: splitList(form.symptoms),
-        tongue: form.tongue || undefined,
-        pulse: form.pulse || undefined,
-        severity_score: Number(form.severity_score || 5),
-        tags: splitList(form.tags),
-      };
-      let createdName = payload.name;
-      try {
-        await api.runSkill('tcm_intake', { json: JSON.stringify(payload) });
-      } catch {
-        await api.syncPatient({
-          name: payload.name,
-          gender: payload.gender,
-          age: payload.age,
-          phone: payload.phone,
-          tags: payload.tags,
-          initialCondition: payload as unknown as Record<string, unknown>,
-          currentCondition: payload as unknown as Record<string, unknown>,
-        } as never);
+      const created = await api.syncPatient({
+        name: patient.name.trim(),
+        gender: patient.gender || undefined,
+        age: patient.age ? Number(patient.age) : undefined,
+        phone: patient.phone || undefined,
+        tags: splitList(patient.tags),
+      } as never);
+
+      if (mode === 'patient+case') {
+        const payload = buildCasePayload(caseForm, created.externalId ?? created.id);
+        if (payload) await api.createCase(payload);
       }
-      setDone(`已建档：${createdName}`);
-      setForm(EMPTY);
+
+      setDone(mode === 'patient+case' ? `已建档：${patient.name}（含首份就诊档案）` : `已建档：${patient.name}（疾病信息可后续补充）`);
+      setPatient(EMPTY_PATIENT);
+      setCaseForm(EMPTY_CASE);
       await onCreated?.();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { setError(String(err)); }
+    finally { setSaving(false); }
   }
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>初始录入 · 建立病人档案</CardTitle>
-      </CardHeader>
+      <CardHeader><CardTitle>初始录入 · 建立病患档案</CardTitle></CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex items-center gap-1 rounded-md bg-secondary p-1">
+          {([['patient+case', '病患 + 疾病信息'], ['patient', '仅病患信息']] as Array<[Mode, string]>).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setMode(key)}
+              className={`flex-1 rounded px-3 py-1.5 text-xs ${mode === key ? 'bg-card shadow font-medium' : 'text-muted-foreground'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
           <FieldWrapper label="姓名" required>
-            <Input value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="张某某" />
+            <Input value={patient.name} onChange={(e) => updatePatient('name', e.target.value)} placeholder="张某某" />
           </FieldWrapper>
           <FieldWrapper label="性别" optional>
-            <Input value={form.gender} onChange={(e) => update('gender', e.target.value)} placeholder="男 / 女" />
+            <Input value={patient.gender} onChange={(e) => updatePatient('gender', e.target.value)} placeholder="男 / 女" />
           </FieldWrapper>
           <FieldWrapper label="年龄" optional>
-            <Input value={form.age} onChange={(e) => update('age', e.target.value)} placeholder="52" inputMode="numeric" />
+            <Input value={patient.age} onChange={(e) => updatePatient('age', e.target.value)} placeholder="52" inputMode="numeric" />
           </FieldWrapper>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <FieldWrapper label="联系手机" optional>
-            <Input value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="138****0000" />
+            <Input value={patient.phone} onChange={(e) => updatePatient('phone', e.target.value)} placeholder="138****0000" />
           </FieldWrapper>
           <FieldWrapper label="标签" optional hint="便于后续按病种聚合">
-            <Input value={form.tags} onChange={(e) => update('tags', e.target.value)} placeholder="眩晕, 高血压" />
+            <Input value={patient.tags} onChange={(e) => updatePatient('tags', e.target.value)} placeholder="眩晕, 失眠" />
           </FieldWrapper>
         </div>
 
-        <FieldWrapper label="主诉" required hint="症状 + 持续时间，例如：头晕头胀 3 月">
-          <Input value={form.chief_complaint} onChange={(e) => update('chief_complaint', e.target.value)} />
-        </FieldWrapper>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <FieldWrapper label="西医诊断" optional>
-            <Input value={form.western_diagnosis} onChange={(e) => update('western_diagnosis', e.target.value)} placeholder="逗号分隔" />
-          </FieldWrapper>
-          <FieldWrapper label="中医病名" optional>
-            <Input value={form.tcm_disease} onChange={(e) => update('tcm_disease', e.target.value)} placeholder="眩晕 / 消渴 / 不寐" />
-          </FieldWrapper>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <FieldWrapper label="辨证分型" optional>
-            <Input value={form.tcm_syndrome} onChange={(e) => update('tcm_syndrome', e.target.value)} placeholder="肝阳上亢、痰湿中阻" />
-          </FieldWrapper>
-          <FieldWrapper label="伴随症状" optional>
-            <Input value={form.symptoms} onChange={(e) => update('symptoms', e.target.value)} placeholder="中医症状，逗号分隔" />
-          </FieldWrapper>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <FieldWrapper label="舌象" optional>
-            <Input value={form.tongue} onChange={(e) => update('tongue', e.target.value)} placeholder="舌红苔黄腻" />
-          </FieldWrapper>
-          <FieldWrapper label="脉象" optional>
-            <Input value={form.pulse} onChange={(e) => update('pulse', e.target.value)} placeholder="弦滑" />
-          </FieldWrapper>
-          <FieldWrapper label="严重度评分" required hint="0~10，作为疗效对比锚点">
-            <Input value={form.severity_score} onChange={(e) => update('severity_score', e.target.value)} inputMode="numeric" />
-          </FieldWrapper>
-        </div>
+        {mode === 'patient+case' ? (
+          <>
+            <div className="border-t border-border pt-4">
+              <p className="mb-3 text-xs font-medium text-foreground">疾病信息（首份就诊档案）</p>
+              <CaseFields form={caseForm} onChange={updateCase} />
+            </div>
+          </>
+        ) : (
+          <p className="rounded-md bg-secondary/50 p-3 text-xs text-muted-foreground">
+            仅保存病患基本信息。就诊档案（主诉 / 现病史 / 就诊方案）可稍后在病患详情页「新增档案」。
+          </p>
+        )}
 
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        {done ? <Alert tone="success">{done}（期初情况已写入，后续只允许追加修正，不覆盖原值）</Alert> : null}
+        {done ? <Alert tone="success">{done}</Alert> : null}
 
         <div className="flex justify-end">
-          <Button onClick={submit} disabled={saving}>
-            {saving ? '提交中…' : '建立档案'}
-          </Button>
+          <Button onClick={submit} disabled={saving}>{saving ? '提交中…' : '建立档案'}</Button>
         </div>
       </CardContent>
     </Card>
   );
-}
-
-function FieldWrapper({
-  label,
-  required,
-  optional,
-  hint,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  optional?: boolean;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label className="flex items-center gap-1">
-        {label}
-        {required ? <span className="text-destructive">*</span> : null}
-        {optional ? <span className="text-xs font-normal text-muted-foreground">选填</span> : null}
-      </Label>
-      {children}
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
-
-function splitList(value: string): string[] {
-  return value.split(/[,，、/|]+/).map((s) => s.trim()).filter(Boolean);
 }

@@ -41,6 +41,7 @@ export interface Contrast {
 export interface Visit {
   id: string;
   externalId?: string;
+  caseId?: string;
   visitNo: number;
   date: string;
   channels: string[];
@@ -50,6 +51,42 @@ export interface Visit {
   parsed?: Record<string, any>;
   outcome?: Record<string, any>;
   raw?: Record<string, any>;
+}
+
+/** 就诊方案（纯中医）：治则治法 + 取穴 + 方剂 + 调摄。 */
+export interface TreatmentPlan {
+  principle?: string;
+  acupoints?: string[];
+  prescriptions?: string[];
+  lifestyle?: string[];
+}
+
+/** 就诊档案（疾病信息）：一个病患可有多份，归档后只读并沉淀内部知识库。 */
+export interface CaseRecord {
+  id: string;
+  externalId?: string;
+  patientId?: string;
+  caseNo: number;
+  chiefComplaint: string;
+  presentIllness?: string;
+  tcmDisease?: string;
+  tcmSyndrome?: string;
+  symptoms: string[];
+  tongue?: string;
+  pulse?: string;
+  severityScore?: number;
+  treatmentPlan?: TreatmentPlan;
+  status: 'active' | 'archived';
+  visitCount: number;
+  contrast?: Contrast;
+  latestSummary?: string;
+  archivedAt?: string;
+  archiveSnapshot?: Record<string, any>;
+  updatedAt?: string;
+  createdAt?: string;
+  visits?: Visit[];
+  /** 归档列表接口（leftJoin）带出的病患信息摘要。 */
+  patient?: { id: string; externalId?: string; name: string; gender?: string; age?: number };
 }
 
 export interface Patient {
@@ -68,6 +105,10 @@ export interface Patient {
   latestSummary?: string;
   updatedAt?: string;
   visits?: Visit[];
+  /** 该病患的全部就诊档案（详情接口返回）。 */
+  cases?: CaseRecord[];
+  /** 最近一次档案（活跃优先），列表接口返回，用于展示多次治疗结果。 */
+  latestCase?: CaseRecord;
 }
 
 export interface KnowledgeRow {

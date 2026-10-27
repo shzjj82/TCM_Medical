@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from '../../entities/patient.entity';
 import { isUuid, normalizeDate, pick, toArray } from '../../common/payload';
+import { CasesService } from '../cases/cases.service';
 
 export interface ListPatientsParams {
   status?: string;
@@ -14,8 +15,10 @@ export interface ListPatientsParams {
 export class PatientsService {
   constructor(
     @InjectRepository(Patient) private readonly repo: Repository<Patient>,
+    private readonly cases: CasesService,
   ) {}
 
+  /** 列表：每个病患附带「最近一次档案」（活跃优先）及其多次治疗对比数据。 */
   async findAll({ status, keyword, limit = 100 }: ListPatientsParams): Promise<Patient[]> {
     const qb = this.repo.createQueryBuilder('p').orderBy('p.updatedAt', 'DESC').limit(limit);
     if (status) qb.andWhere('p.status = :status', { status });
@@ -25,7 +28,12 @@ export class PatientsService {
         { kw: `%${keyword}%` },
       );
     }
-    return qb.getMany();
+    const rows = await qb.getMany();
+    const latestCases = await this.cases.latestByPatients(rows.map((r) => r.id));
+    return rows.map((row) => {
+      const latestCase = latestCases.get(row.id);
+      return latestCase ? Object.assign(row, { latestCase }) : row;
+    });
   }
 
   /** 同时支持 uuid、Skill 侧 external_id 与姓名查找。 */

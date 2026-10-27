@@ -1,150 +1,114 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Plus } from 'lucide-react';
 import { Alert } from '../components/ui/alert';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { FollowupForm } from '../components/FollowupForm';
-import { PatientContrastPanel } from '../components/PatientContrastPanel';
-import { VisitTimeline } from '../components/VisitTimeline';
+import { CaseForm } from '../components/CaseForm';
 import { api } from '../lib/api';
-import type { AdviseResult, Patient } from '../types';
+import { pickField, pickNumber, VERDICT_TONE } from '../lib/coerce';
+import type { Patient } from '../types';
 
 interface Props {
   patientKey: string;
   onBack: () => void;
-  onAdvise: (patientKey: string) => void;
+  onOpenCase: (caseKey: string) => void;
 }
 
-export function PatientDetailPage({ patientKey, onBack, onAdvise }: Props) {
+/** 病患详情：基本信息 + 就诊档案（疾病信息）列表。点击档案进入诊断档案页。 */
+export function PatientDetailPage({ patientKey, onBack, onOpenCase }: Props) {
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [advice, setAdvice] = useState<AdviseResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [advising, setAdvising] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCaseForm, setShowCaseForm] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setPatient(await api.getPatient(patientKey));
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError(null);
+    try { setPatient(await api.getPatient(patientKey)); }
+    catch (err) { setError(String(err)); }
+    finally { setLoading(false); }
   }, [patientKey]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function requestAdvice() {
-    setAdvising(true);
-    try {
-      setAdvice(await api.advise({ patientId: patientKey, topK: 5 }));
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setAdvising(false);
-    }
-  }
+  useEffect(() => { void load(); }, [load]);
 
   if (loading && !patient) return <Card className="p-6 text-sm text-muted-foreground">加载中…</Card>;
-  if (!patient) return <Alert tone="danger">{error ?? '未找到该病人'}</Alert>;
+  if (!patient) return <Alert tone="danger">{error ?? '未找到该病患'}</Alert>;
+
+  const cases = patient.cases ?? [];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-          返回列表
-        </Button>
-        <Button size="sm" variant="accent" onClick={requestAdvice} disabled={advising}>
-          <Sparkles className="h-4 w-4" />
-          {advising ? '生成中…' : '生成治疗建议'}
+        <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4" />返回列表</Button>
+        <Button size="sm" onClick={() => setShowCaseForm((v) => !v)}>
+          <Plus className="h-4 w-4" />{showCaseForm ? '收起' : '新增档案'}
         </Button>
       </div>
 
       {error ? <Alert tone="danger">{error}</Alert> : null}
 
-      <PatientContrastPanel
-        contrast={patient.contrast}
-        patientName={patient.name}
-        patientId={patient.externalId ?? patient.id}
-      />
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-base font-semibold">{patient.name}</p>
+            <span className="text-xs text-muted-foreground">
+              {patient.gender ?? '性别未填'} · {patient.age ? `${patient.age} 岁` : '年龄未填'} · {patient.phone ?? '手机未填'}
+            </span>
+          </div>
+          {patient.tags.length ? (
+            <div className="mt-3 flex flex-wrap gap-1">
+              {patient.tags.map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      {advice ? <AdviceCard advice={advice} /> : null}
-
-      <FollowupForm patientKey={patient.externalId ?? patient.id} onSaved={load} />
+      {showCaseForm ? (
+        <CaseForm patientKey={patient.externalId ?? patient.id} onCreated={async () => { setShowCaseForm(false); await load(); }} />
+      ) : null}
 
       <Card>
-        <CardHeader>
-          <CardTitle>诊疗时间轴</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <VisitTimeline visits={patient.visits ?? []} />
+        <CardHeader><CardTitle>就诊档案（{cases.length}）</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {cases.length === 0 ? (
+            <p className="text-sm text-muted-foreground">暂无就诊档案。点击右上角「新增档案」录入疾病信息。</p>
+          ) : (
+            cases.map((item) => {
+              const contrast = (item.contrast ?? {}) as Record<string, any>;
+              const initial = pickNumber(contrast.initial, 'severity_score', 'severityScore');
+              const latest = pickNumber(contrast.latest, 'severity_score', 'severityScore');
+              const verdict = pickField<string>(contrast.delta, 'verdict', 'verdict');
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onOpenCase(item.externalId ?? item.id)}
+                  className="w-full rounded-md border border-border p-3 text-left transition-colors hover:bg-secondary/40"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      第 {item.caseNo} 档案 · {item.tcmDisease ?? '未命名病'}
+                      {item.tcmSyndrome ? <span className="ml-1 text-xs font-normal text-muted-foreground">（{item.tcmSyndrome}）</span> : null}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={item.status === 'archived' ? 'secondary' : 'success'}>
+                        {item.status === 'archived' ? '已归档' : '治疗中'}
+                      </Badge>
+                      {verdict ? <Badge variant={VERDICT_TONE[verdict] ?? 'secondary'}>{verdict}</Badge> : null}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                  <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{item.chiefComplaint}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    治疗 {item.visitCount} 次
+                    {initial !== undefined || latest !== undefined ? ` · 严重度 ${initial ?? '—'} → ${latest ?? '—'}` : ''}
+                  </p>
+                </button>
+              );
+            })
+          )}
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function AdviceCard({ advice }: { advice: AdviseResult }) {
-  if (advice.safetyAlerts.length) {
-    return (
-      <Alert tone="danger" title="安全红线警示">
-        {advice.safetyAlerts.join('、')} —— 请先排除急重症，必要时转诊，不要仅凭中医保守方案处理。
-      </Alert>
-    );
-  }
-  const plan = advice.plan ?? {};
-  return (
-    <Card className="border-accent/40">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          治疗建议
-          <Badge variant={advice.mode === 'llm' ? 'success' : 'warning'}>
-            {advice.mode === 'llm' ? 'AI 综合生成' : '资料检索草稿'}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <p className="text-muted-foreground">
-          治则治法：<span className="font-medium text-foreground">{plan.treatmentPrinciple ?? '—'}</span>
-        </p>
-        {plan.acupuncturePlan?.length ? (
-          <div>
-            <p className="font-medium">针灸取穴</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {plan.acupuncturePlan.map((item, index) => (
-                <span key={`${item.point}-${index}`} className="rounded-md border border-border bg-secondary/50 px-2 py-1 text-xs">
-                  {item.point}
-                  <span className="ml-1 text-muted-foreground">
-                    {item.manipulation ?? ''} 留针 {item.retentionMin ?? item.retention_min ?? '—'} 分钟
-                  </span>
-                  <span className="ml-1 font-mono text-[10px] text-primary">[{item.source}]</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {plan.herbalPlan?.length ? (
-          <div>
-            <p className="font-medium">方药</p>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-              {plan.herbalPlan.map((item, index) => (
-                <li key={`${item.formula}-${index}`}>
-                  {item.formula}
-                  {item.modification ? `（${item.modification}）` : ''}
-                  <span className="ml-1 font-mono text-[10px] text-primary">[{item.source}]</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <p className="text-xs text-muted-foreground">{advice.disclaimer}</p>
-      </CardContent>
-    </Card>
   );
 }

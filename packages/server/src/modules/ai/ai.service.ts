@@ -67,8 +67,9 @@ export class AiService {
         `姓名：${patient.name}　性别：${patient.gender ?? '-'}　年龄：${patient.age ?? '-'}`,
         `已诊疗：${patient.visitCount} 次`,
         `主诉：${initial.chief_complaint ?? initial.chiefComplaint ?? '-'}`,
+        `现病史：${initial.present_illness ?? initial.presentIllness ?? '-'}`,
         `当前情况：${current.summary ?? '-'}`,
-        `西医诊断：${toArray(current.western_diagnosis ?? current.westernDiagnosis).join('、') || '-'}`,
+        `中医病名：${current.tcm_disease ?? current.tcmDisease ?? '-'}　证型：${current.tcm_syndrome ?? current.tcmSyndrome ?? '-'}`,
         `舌脉：${current.tongue ?? '-'}　${current.pulse ?? '-'}`,
         `严重度：${current.severity_score ?? current.severityScore ?? '-'}`,
         input.text ? `补充说明：${input.text}` : '',
@@ -104,7 +105,7 @@ export class AiService {
         acupuncturePlan: internal.flatMap((row) => toArray(pick(row.payload, ['acupoints'])).map((p) => ({
           point: p, source: row.id,
         }))),
-        note: '未配置 DEEPSEEK_API_KEY，仅返回资料库检索结果，未做综合推理。',
+        note: '未配置 LLM_API_KEY（通义百炼），仅返回资料库检索结果，未做综合推理。',
       };
       return result;
     }
@@ -139,7 +140,7 @@ export class AiService {
   async parseNote(input: { text?: string; doctorNote?: string }) {
     const material = input.doctorNote || input.text || '';
     if (!material) throw new Error('缺少待解析内容');
-    if (!this.client.enabled) throw new Error('未配置 DEEPSEEK_API_KEY，无法调用 AI 解析');
+    if (!this.client.enabled) throw new Error('未配置 LLM_API_KEY（通义百炼），无法调用 AI 解析');
     const raw = await this.client.chat([
       { role: 'system', content: PARSE_SYSTEM },
       {

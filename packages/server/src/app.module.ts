@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiModule } from './modules/ai/ai.module';
+import { CasesModule } from './modules/cases/cases.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { HealthController } from './health.controller';
@@ -25,6 +26,7 @@ import { HealthController } from './health.controller';
       }),
     }),
     PatientsModule,
+    CasesModule,
     KnowledgeModule,
     AiModule,
   ],

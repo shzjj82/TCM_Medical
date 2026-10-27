@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CaseRecord } from '../../entities/case-record.entity';
 import { Patient } from '../../entities/patient.entity';
 import { Visit } from '../../entities/visit.entity';
 import { isUuid, normalizeDate, pick, toArray } from '../../common/payload';
@@ -10,6 +11,7 @@ export class VisitsService {
   constructor(
     @InjectRepository(Visit) private readonly repo: Repository<Visit>,
     @InjectRepository(Patient) private readonly patients: Repository<Patient>,
+    @InjectRepository(CaseRecord) private readonly cases: Repository<CaseRecord>,
   ) {}
 
   async listForPatient(patientKey: string): Promise<Visit[]> {
@@ -66,6 +68,20 @@ export class VisitsService {
         .where('p.externalId = :ext', { ext: externalPatientId })
         .getOne();
       if (patient) visit.patient = patient;
+    }
+
+    // 绑定就诊档案：支持 uuid 或 Skill 侧外部 ID
+    const caseKey = pick<string>(payload, ['caseId', 'case_id', 'externalCaseId', 'external_case_id']);
+    if (caseKey && !visit.caseId) {
+      const cqb = this.cases.createQueryBuilder('c');
+      if (isUuid(caseKey)) cqb.where('c.id = :uuidKey', { uuidKey: caseKey }).orWhere('c.externalId = :key', { key: caseKey });
+      else cqb.where('c.externalId = :key', { key: caseKey });
+      const caseRecord = await cqb.getOne();
+      if (caseRecord) {
+        visit.caseRecord = caseRecord;
+        visit.caseId = caseRecord.id;
+        visit.externalCaseId = caseRecord.externalId;
+      }
     }
     return this.repo.save(visit);
   }

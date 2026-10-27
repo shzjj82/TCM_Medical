@@ -3,6 +3,7 @@ import { FileHeart, Leaf, Library, Sparkles, Wand2 } from 'lucide-react';
 import { Alert } from './components/ui/alert';
 import { Badge } from './components/ui/badge';
 import { AdvisePage } from './pages/AdvisePage';
+import { CaseDetailPage } from './pages/CaseDetailPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { PatientDetailPage } from './pages/PatientDetailPage';
 import { PatientsPage } from './pages/PatientsPage';
@@ -12,24 +13,39 @@ import { api } from './lib/api';
 type PageKey = 'patients' | 'knowledge' | 'advise' | 'skills';
 
 const NAV: Array<{ key: PageKey; label: string; icon: typeof FileHeart }> = [
-  { key: 'patients', label: '病人档案', icon: FileHeart },
-  { key: 'knowledge', label: '治疗资料库', icon: Library },
-  { key: 'advise', label: '治疗建议', icon: Sparkles },
-  { key: 'skills', label: 'Skill 面板', icon: Wand2 },
+  { key: 'patients', label: '病患', icon: FileHeart },
+  { key: 'knowledge', label: '知识库', icon: Library },
+  { key: 'advise', label: 'AI 建议', icon: Sparkles },
+  { key: 'skills', label: 'Skill', icon: Wand2 },
 ];
 
 export default function App() {
   const [page, setPage] = useState<PageKey>('patients');
   const [patientKey, setPatientKey] = useState<string | null>(null);
+  const [caseKey, setCaseKey] = useState<string | null>(null);
   const [health, setHealth] = useState<Awaited<ReturnType<typeof api.health>> | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .health()
-      .then(setHealth)
-      .catch((err) => setHealthError(String(err)));
+    api.health().then(setHealth).catch((err) => setHealthError(String(err)));
   }, []);
+
+  function goto(next: PageKey) {
+    setPage(next);
+    setPatientKey(null);
+    setCaseKey(null);
+  }
+
+  function openPatient(key: string) {
+    setPatientKey(key);
+    setCaseKey(null);
+  }
+
+  function openCase(key: string) {
+    setCaseKey(key);
+  }
+
+  const inDetail = patientKey !== null;
 
   return (
     <div className="min-h-screen">
@@ -46,8 +62,8 @@ export default function App() {
             {health ? (
               <>
                 <Badge variant="success">服务端已连接</Badge>
-                <Badge variant={health.ai?.configured ? 'success' : 'warning'}>
-                  {health.ai?.configured ? 'DeepSeek 已配置' : 'DeepSeek 未配置（规则模式）'}
+                <Badge variant={health.ai?.enabled ? 'success' : 'warning'}>
+                  {health.ai?.enabled ? 'AI 已配置' : 'AI 未配置（规则模式）'}
                 </Badge>
               </>
             ) : (
@@ -57,20 +73,18 @@ export default function App() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1280px] gap-4 px-4 py-4">
+      <div className="mx-auto flex max-w-[1280px] gap-4 px-4 py-4 pb-24 md:pb-4">
+        {/* 桌面端侧边栏 */}
         <aside className="hidden w-44 shrink-0 md:block">
           <nav className="space-y-1">
             {NAV.map((item) => {
               const Icon = item.icon;
-              const active = page === item.key && !patientKey;
+              const active = page === item.key;
               return (
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => {
-                    setPage(item.key);
-                    setPatientKey(null);
-                  }}
+                  onClick={() => goto(item.key)}
                   className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                     active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'
                   }`}
@@ -90,39 +104,27 @@ export default function App() {
             </Alert>
           ) : null}
 
-          <div className="md:hidden">
-            <nav className="mb-4 flex gap-1 overflow-x-auto rounded-md bg-secondary p-1">
-              {NAV.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => {
-                    setPage(item.key);
-                    setPatientKey(null);
-                  }}
-                  className={`whitespace-nowrap rounded px-3 py-1 text-xs ${
-                    page === item.key && !patientKey ? 'bg-card shadow' : 'text-muted-foreground'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {patientKey ? (
+          {caseKey && patientKey ? (
+            <CaseDetailPage
+              caseKey={caseKey}
+              patientKey={patientKey}
+              onBack={() => setCaseKey(null)}
+            />
+          ) : patientKey ? (
             <PatientDetailPage
               patientKey={patientKey}
               onBack={() => setPatientKey(null)}
-              onAdvise={() => {
-                setPage('advise');
-                setPatientKey(null);
-              }}
+              onOpenCase={openCase}
             />
           ) : page === 'patients' ? (
-            <PatientsPage onOpen={setPatientKey} />
+            <PatientsPage onOpen={openPatient} />
           ) : page === 'knowledge' ? (
-            <KnowledgePage />
+            <KnowledgePage
+              onOpenCase={(caseKey, patientKey) => {
+                setPatientKey(patientKey);
+                setCaseKey(caseKey);
+              }}
+            />
           ) : page === 'advise' ? (
             <AdvisePage />
           ) : (
@@ -130,6 +132,32 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* H5 底部 TabBar：仅移动端展示，固定底部并适配安全区 */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur md:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="grid grid-cols-4">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const active = page === item.key || (item.key === 'patients' && inDetail);
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => goto(item.key)}
+                className={`flex flex-col items-center gap-0.5 py-2 text-[11px] transition-colors ${
+                  active ? 'text-primary' : 'text-muted-foreground'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

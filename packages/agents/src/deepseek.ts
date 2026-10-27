@@ -1,8 +1,9 @@
 /**
- * DeepSeek 客户端（OpenAI 兼容协议）。
+ * LLM 客户端（OpenAI 兼容协议）。
  *
- * 只用 Node 内置 fetch，不引入 SDK，方便在任意网关（官方 DeepSeek / 兼容中转）上跑。
- * 全部配置走环境变量：DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / DEEPSEEK_MODEL / DEEPSEEK_REASONER_MODEL
+ * 只用 Node 内置 fetch，不引入 SDK，方便在任意兼容网关上跑。
+ * 默认接入阿里云通义百炼（DashScope 兼容模式），配置优先级：LLM_* > QWEN_* > DEEPSEEK_*（旧配置兼容）。
+ * 环境变量：LLM_API_KEY / LLM_BASE_URL / LLM_MODEL / LLM_REASONER_MODEL
  */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -53,11 +54,22 @@ export class DeepSeekClient {
   readonly timeoutMs: number;
 
   constructor(options: DeepSeekOptions = {}) {
-    this.apiKey = options.apiKey ?? process.env.DEEPSEEK_API_KEY ?? '';
-    this.baseUrl = (options.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '');
-    this.model = options.model ?? process.env.DEEPSEEK_MODEL ?? 'deepseek-chat';
-    this.reasonerModel = options.reasonerModel ?? process.env.DEEPSEEK_REASONER_MODEL ?? 'deepseek-reasoner';
-    this.timeoutMs = options.timeoutMs ?? Number(process.env.DEEPSEEK_TIMEOUT ?? 90000);
+    this.apiKey = options.apiKey ?? process.env.LLM_API_KEY ?? process.env.QWEN_API_KEY ?? process.env.DEEPSEEK_API_KEY ?? '';
+    this.baseUrl = (
+      options.baseUrl ??
+      process.env.LLM_BASE_URL ??
+      process.env.QWEN_BASE_URL ??
+      process.env.DEEPSEEK_BASE_URL ??
+      'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    ).replace(/\/+$/, '');
+    this.model = options.model ?? process.env.LLM_MODEL ?? process.env.QWEN_MODEL ?? process.env.DEEPSEEK_MODEL ?? 'qwen-plus';
+    this.reasonerModel =
+      options.reasonerModel ??
+      process.env.LLM_REASONER_MODEL ??
+      process.env.QWEN_REASONER_MODEL ??
+      process.env.DEEPSEEK_REASONER_MODEL ??
+      'qwen-max';
+    this.timeoutMs = options.timeoutMs ?? Number(process.env.LLM_TIMEOUT ?? process.env.DEEPSEEK_TIMEOUT ?? 90000);
   }
 
   get enabled(): boolean {
@@ -90,7 +102,7 @@ export class DeepSeekClient {
     opts: { reasoner?: boolean; temperature?: number; maxTokens?: number; tools?: ChatTool[] } = {},
   ): Promise<ChatResult> {
     if (!this.enabled) {
-      throw new Error('未配置 DEEPSEEK_API_KEY，无法调用 AI 能力');
+      throw new Error('未配置 LLM_API_KEY（或 QWEN_API_KEY），无法调用 AI 能力');
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -117,7 +129,7 @@ export class DeepSeekClient {
       });
       if (!res.ok) {
         const detail = await res.text();
-        throw new Error(`DeepSeek ${res.status}: ${detail.slice(0, 300)}`);
+        throw new Error(`LLM ${res.status}: ${detail.slice(0, 300)}`);
       }
       const data = (await res.json()) as {
         choices?: Array<{ message?: { content?: string; tool_calls?: ToolCallPayload[] } }>;

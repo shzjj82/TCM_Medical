@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { CaseRecord } from './case-record.entity';
 import { Patient } from './patient.entity';
 
 /**
@@ -31,6 +32,18 @@ export class Visit {
   @ManyToOne(() => Patient, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'patientId' })
   patient?: Patient;
+
+  /** 治疗记录归属的就诊档案（疾病信息）；老数据可能为空。 */
+  @Column({ type: 'uuid', nullable: true })
+  caseId?: string;
+
+  @ManyToOne(() => CaseRecord, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'caseId' })
+  caseRecord?: CaseRecord;
+
+  /** Skill 同步路径使用的档案外部 ID。 */
+  @Column({ name: 'external_case_id', nullable: true })
+  externalCaseId?: string;
 
   @Column({ name: 'visit_no', type: 'int' })
   visitNo!: number;

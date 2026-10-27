@@ -1,4 +1,4 @@
-import type { AdviseResult, Patient, SkillSummary, Visit } from '../types';
+import type { AdviseResult, CaseRecord, Patient, SkillSummary, Visit } from '../types';
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
 
@@ -27,6 +27,26 @@ export const api = {
 
   listVisits: (patientId: string) => request<Visit[]>(`/visits${qs({ patientId })}`),
 
+  // ---------- 就诊档案（疾病信息） ----------
+  listCases: (patientKey: string) => request<CaseRecord[]>(`/cases${qs({ patientId: patientKey })}`),
+
+  /** 已归档档案列表（内部知识库数据源，带出病患信息）。 */
+  listArchivedCases: () => request<CaseRecord[]>('/cases?status=archived'),
+
+  getCase: (key: string) => request<CaseRecord>(`/cases/${encodeURIComponent(key)}`),
+
+  createCase: (payload: Record<string, unknown>) =>
+    request<CaseRecord>('/cases', { method: 'POST', body: JSON.stringify(payload) }),
+
+  updateCase: (key: string, payload: Record<string, unknown>) =>
+    request<CaseRecord>(`/cases/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+
+  addCaseVisit: (caseKey: string, payload: Record<string, unknown>) =>
+    request<Visit>(`/cases/${encodeURIComponent(caseKey)}/visits`, { method: 'POST', body: JSON.stringify(payload) }),
+
+  archiveCase: (caseKey: string) =>
+    request<CaseRecord>(`/cases/${encodeURIComponent(caseKey)}/archive`, { method: 'POST' }),
+
   reviewVisit: (externalId: string, status: 'confirmed' | 'rejected') =>
     request<Visit>(`/visits/${encodeURIComponent(externalId)}/review`, {
       method: 'PATCH',
@@ -41,6 +61,9 @@ export const api = {
 
   searchKnowledge: (scope: 'external' | 'internal', q: string, topK = 8) =>
     request<Array<Record<string, unknown>>>(`/knowledge/${scope}${qs({ q, topK })}`),
+
+  syncExternalReference: (payload: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/knowledge/external/sync', { method: 'POST', body: JSON.stringify(payload) }),
 
   listSkills: () => request<SkillSummary[]>('/skills/triggers'),
 
