@@ -2,8 +2,8 @@ import * as React from 'react';
 import { forwardRef, type HTMLAttributes } from 'react';
 import { cn } from '../../lib/utils';
 
-export const Tabs = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { value: string; onValueChange: (v: string) => void }>(
-  ({ className, value, onValueChange, children, ...props }, ref) => {
+export const Tabs = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { value: string; onValueChange: (v: string) => void; compact?: boolean }>(
+  ({ className, value, onValueChange, compact, children, ...props }, ref) => {
     const items: Array<{ label: string; key: string }> = [];
     const others: React.ReactNode[] = [];
     // 约定：Tab 组件用 key/label 描述，这里先收集再渲染出头 + 内容
@@ -32,7 +32,7 @@ export const Tabs = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & 
             </button>
           ))}
         </div>
-        <div className="mt-4">{others}</div>
+        {compact ? null : <div className="mt-4">{others}</div>}
       </div>
     );
   },

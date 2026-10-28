@@ -96,6 +96,7 @@ export interface Patient {
   gender?: string;
   age?: number;
   phone?: string;
+  doctor?: string;
   tags: string[];
   status: 'active' | 'paused' | 'closed';
   visitCount: number;

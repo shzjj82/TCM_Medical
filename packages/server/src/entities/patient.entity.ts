@@ -28,6 +28,10 @@ export class Patient {
   @Column({ nullable: true })
   phone?: string;
 
+  /** 主治医生。旧数据为空，列表展示为「—」，不编造。 */
+  @Column({ nullable: true })
+  doctor?: string;
+
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   tags!: string[];
 

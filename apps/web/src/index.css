@@ -4,12 +4,12 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    --background: 180 23% 96%;
+    --foreground: 200 25% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 142 45% 28%;
-    --primary-foreground: 210 40% 98%;
+    --card-foreground: 200 25% 16%;
+    --primary: 173 72% 26%;
+    --primary-foreground: 180 23% 98%;
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 96%;
@@ -20,8 +20,8 @@
     --destructive-foreground: 0 0% 100%;
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 142 45% 28%;
-    --radius: 0.6rem;
+    --ring: 173 72% 26%;
+    --radius: 0.85rem;
   }
 
   .dark {
@@ -46,9 +46,45 @@
     @apply border-border;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes dialog-in {
+  from { transform: translateY(8px) scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@keyframes filter-aside-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.filter-aside-in {
+  animation: filter-aside-in 0.22s ease-out;
+}
+
+.form-sheet-panel {
+  animation: sheet-up 0.22s ease-out;
+}
+
+@media (min-width: 768px) {
+  .form-sheet-panel {
+    animation: dialog-in 0.18s ease-out;
   }
 }
 
@@ -59,5 +95,17 @@
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
     @apply rounded-full bg-border;
+  }
+
+  @media (max-width: 767px) {
+    .scrollbar-thin {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .scrollbar-thin::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
   }
 }

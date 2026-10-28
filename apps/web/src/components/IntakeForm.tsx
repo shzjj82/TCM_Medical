@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Alert } from './ui/alert';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { buildCasePayload, CaseFields, EMPTY_CASE, FieldWrapper, splitList, type CaseFormState } from './CaseForm';
 import { api } from '../lib/api';
 
 interface Props { onCreated?: () => void | Promise<void>; }
 
-const EMPTY_PATIENT = { name: '', gender: '', age: '', phone: '', tags: '' };
+const EMPTY_PATIENT = { name: '', gender: '', age: '', phone: '', doctor: '', tags: '' };
 
 type Mode = 'patient' | 'patient+case';
 
@@ -44,6 +43,7 @@ export function IntakeForm({ onCreated }: Props) {
         gender: patient.gender || undefined,
         age: patient.age ? Number(patient.age) : undefined,
         phone: patient.phone || undefined,
+        doctor: patient.doctor || undefined,
         tags: splitList(patient.tags),
       } as never);
 
@@ -61,9 +61,7 @@ export function IntakeForm({ onCreated }: Props) {
   }
 
   return (
-    <Card>
-      <CardHeader><CardTitle>初始录入 · 建立病患档案</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
         <div className="flex items-center gap-1 rounded-md bg-secondary p-1">
           {([['patient+case', '病患 + 疾病信息'], ['patient', '仅病患信息']] as Array<[Mode, string]>).map(([key, label]) => (
             <button
@@ -89,9 +87,12 @@ export function IntakeForm({ onCreated }: Props) {
           </FieldWrapper>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <FieldWrapper label="联系手机" optional>
             <Input value={patient.phone} onChange={(e) => updatePatient('phone', e.target.value)} placeholder="138****0000" />
+          </FieldWrapper>
+          <FieldWrapper label="主治医生" optional>
+            <Input value={patient.doctor} onChange={(e) => updatePatient('doctor', e.target.value)} placeholder="张医生" />
           </FieldWrapper>
           <FieldWrapper label="标签" optional hint="便于后续按病种聚合">
             <Input value={patient.tags} onChange={(e) => updatePatient('tags', e.target.value)} placeholder="眩晕, 失眠" />
@@ -115,9 +116,8 @@ export function IntakeForm({ onCreated }: Props) {
         {done ? <Alert tone="success">{done}</Alert> : null}
 
         <div className="flex justify-end">
-          <Button onClick={submit} disabled={saving}>{saving ? '提交中…' : '建立档案'}</Button>
+          <Button className="w-full md:w-auto" onClick={submit} disabled={saving}>{saving ? '提交中…' : '建立档案'}</Button>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }

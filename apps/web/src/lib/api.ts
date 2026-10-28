@@ -1,5 +1,29 @@
 import type { AdviseResult, CaseRecord, Patient, SkillSummary, Visit } from '../types';
 
+export interface PatientFacets {
+  diseases: string[];
+  syndromes: string[];
+  tags: string[];
+  doctors: string[];
+}
+
+export interface DuplicatePatient {
+  id: string;
+  externalId?: string;
+  name: string;
+  phone?: string;
+  gender?: string;
+  age?: number;
+  doctor?: string;
+  visitCount: number;
+  tags: string[];
+}
+
+export interface DuplicateGroup {
+  reason: string;
+  patients: DuplicatePatient[];
+}
+
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -17,8 +41,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ ok: boolean; ai: Record<string, unknown> }>('/health'),
 
-  listPatients: (keyword?: string, status?: string) =>
-    request<Patient[]>(`/patients${qs({ q: keyword, status })}`),
+  listPatients: (params?: {
+    keyword?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+    disease?: string;
+    syndrome?: string;
+    course?: string;
+    tag?: string;
+    doctor?: string;
+    visit?: string;
+    view?: string;
+  }) =>
+    request<{ items: Patient[]; total: number; page: number; pageSize: number }>(
+      `/patients${qs({
+        q: params?.keyword,
+        status: params?.status,
+        page: params?.page,
+        pageSize: params?.pageSize,
+        disease: params?.disease,
+        syndrome: params?.syndrome,
+        course: params?.course,
+        tag: params?.tag,
+        doctor: params?.doctor,
+        visit: params?.visit,
+        view: params?.view,
+      })}`,
+    ),
+
+  patientFacets: () => request<PatientFacets>('/patients/facets'),
+
+  patientDuplicates: () => request<DuplicateGroup[]>('/patients/duplicates'),
+
+  mergePatients: (primaryId: string, duplicateId: string) =>
+    request<Patient>('/patients/merge', { method: 'POST', body: JSON.stringify({ primaryId, duplicateId }) }),
 
   getPatient: (key: string) => request<Patient>(`/patients/${encodeURIComponent(key)}`),
 
