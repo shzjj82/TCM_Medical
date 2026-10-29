@@ -4,6 +4,7 @@ import { Alert } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { FormSheet } from '../components/ui/form-sheet';
 import { Input } from '../components/ui/input';
+import { Scrollbar } from '../components/ui/scrollbar';
 import { IntakeForm } from '../components/IntakeForm';
 import { DuplicateSheet, PatientFilterButton, PatientFilterSidebar, PatientListFilters, PatientViewTabs } from '../components/PatientListFilters';
 import { PatientBrief, toPatientBrief } from '../components/PatientBrief';
@@ -208,7 +209,7 @@ export function PatientsPage({ onOpen }: Props) {
       />
       {error ? <Alert tone="danger">{error}</Alert> : null}
 
-      <div ref={listRef} className="scrollbar-thin min-h-0 flex-1 overflow-auto">
+      <Scrollbar ref={listRef} className="min-h-0 flex-1">
         {view.length === 0 ? (
           <p className="py-16 text-center text-sm text-slate-400">
             {loading ? '加载中…' : filtering ? '没有符合当前筛选的患者' : '暂无患者，点击「建档」录入第一位'}
@@ -223,7 +224,7 @@ export function PatientsPage({ onOpen }: Props) {
             )}
           </div>
         )}
-      </div>
+      </Scrollbar>
       {desktop ? (
         <div className="flex shrink-0 items-center justify-between gap-3 text-xs text-slate-500">
           <span>共 {total} 条</span>

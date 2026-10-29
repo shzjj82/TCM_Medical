@@ -43,6 +43,10 @@ export interface Visit {
   externalId?: string;
   caseId?: string;
   visitNo: number;
+  kind?: 'first' | 'return' | 'close' | 'refer' | 'follow' | null;
+  chiefComplaint?: string | null;
+  presentIllness?: string | null;
+  diagnosis?: Record<string, any> | null;
   date: string;
   channels: string[];
   doctorNote?: string;
@@ -53,12 +57,36 @@ export interface Visit {
   raw?: Record<string, any>;
 }
 
-/** 就诊方案（纯中医）：治则治法 + 取穴 + 方剂 + 调摄。 */
+/** 就诊方案（纯中医）：治则治法 + 取穴 + 方剂 + 调摄，可附带一条随访。 */
 export interface TreatmentPlan {
   principle?: string;
   acupoints?: string[];
   prescriptions?: string[];
   lifestyle?: string[];
+  followup?: { date?: string; note?: string };
+}
+
+export interface CaseHistory {
+  id?: string;
+  pastHistory?: string | null;
+  familyHistory?: string | null;
+  allergyHistory?: string | null;
+  medicationHistory?: string | null;
+  surgeryHistory?: string | null;
+}
+
+export interface CaseDiagnosis {
+  id?: string;
+  westernDiagnosis?: string | null;
+  tcmDisease?: string | null;
+  tcmSyndrome?: string | null;
+}
+
+export interface CaseExam {
+  id?: string;
+  kind: '检验' | '检查';
+  title?: string | null;
+  result?: string | null;
 }
 
 /** 就诊档案（疾病信息）：一个病患可有多份，归档后只读并沉淀内部知识库。 */
@@ -69,14 +97,21 @@ export interface CaseRecord {
   caseNo: number;
   chiefComplaint: string;
   presentIllness?: string;
+  menstrualHistory?: string;
+  dailyCondition?: string;
+  signs?: string;
   tcmDisease?: string;
   tcmSyndrome?: string;
   symptoms: string[];
   tongue?: string;
   pulse?: string;
   severityScore?: number;
+  history?: CaseHistory | null;
+  diagnosis?: CaseDiagnosis | null;
+  exams?: CaseExam[];
   treatmentPlan?: TreatmentPlan;
   status: 'active' | 'archived';
+  courseEnd?: 'closed' | 'referred' | null;
   visitCount: number;
   contrast?: Contrast;
   latestSummary?: string;
@@ -94,10 +129,18 @@ export interface Patient {
   externalId?: string;
   name: string;
   gender?: string;
-  age?: number;
+  age?: number | null;
+  birthDate?: string | null;
   phone?: string;
+  idCardMask?: string | null;
+  occupation?: string | null;
+  residence?: string | null;
+  source?: string | null;
   doctor?: string;
+  privacyConsent?: 'unknown' | 'granted' | 'revoked';
+  aiConsent?: 'unknown' | 'granted' | 'revoked';
   tags: string[];
+  emergencyContacts?: Array<{ id?: string; name?: string | null; relation?: string | null; phone?: string | null }>;
   status: 'active' | 'paused' | 'closed';
   visitCount: number;
   initialCondition?: Condition;

@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 /** shadcn/ui Calendar（react-day-picker v8），配色沿用项目 CSS 变量。 */
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
-function Calendar({ className, classNames, ...props }: CalendarProps) {
+function Calendar({ className, classNames, components, ...props }: CalendarProps) {
   return (
     <DayPicker
       className={cn('p-3', className)}
@@ -39,6 +39,7 @@ function Calendar({ className, classNames, ...props }: CalendarProps) {
       components={{
         IconLeft: () => <ChevronLeft className="h-4 w-4" />,
         IconRight: () => <ChevronRight className="h-4 w-4" />,
+        ...components,
       }}
       {...props}
     />

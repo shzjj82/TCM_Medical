@@ -6,6 +6,7 @@ import { CasesModule } from './modules/cases/cases.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { HealthController } from './health.controller';
+import { FilesController } from './modules/files/files.controller';
 
 @Module({
   imports: [
@@ -30,6 +31,6 @@ import { HealthController } from './health.controller';
     KnowledgeModule,
     AiModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, FilesController],
 })
 export class AppModule {}

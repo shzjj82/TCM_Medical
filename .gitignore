@@ -33,3 +33,4 @@ skills/**/output/
 __pycache__
 *.pyc
 .venv
+uploads/

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CaseRecord } from '../../entities/case-record.entity';
+import { PatientContact } from '../../entities/patient-contact.entity';
 import { Patient } from '../../entities/patient.entity';
 import { Visit } from '../../entities/visit.entity';
 import { CasesModule } from '../cases/cases.module';
@@ -10,7 +11,7 @@ import { VisitsController } from './visits.controller';
 import { VisitsService } from './visits.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Patient, Visit, CaseRecord]), CasesModule],
+  imports: [TypeOrmModule.forFeature([Patient, PatientContact, Visit, CaseRecord]), CasesModule],
   controllers: [PatientsController, VisitsController],
   providers: [PatientsService, VisitsService],
   exports: [PatientsService, VisitsService],

@@ -79,6 +79,9 @@ export const api = {
 
   getPatient: (key: string) => request<Patient>(`/patients/${encodeURIComponent(key)}`),
 
+  updatePatient: (key: string, payload: Record<string, unknown>) =>
+    request<Patient>(`/patients/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+
   syncPatient: (payload: Partial<Patient>) =>
     request<Patient>('/patients/sync', { method: 'POST', body: JSON.stringify(payload) }),
 
@@ -115,6 +118,31 @@ export const api = {
 
   parseNote: (payload: { text?: string; doctorNote?: string }) =>
     request<Record<string, unknown>>('/ai/parse', { method: 'POST', body: JSON.stringify(payload) }),
+
+  compareVisit: (payload: { previous?: string; current?: string }) =>
+    request<{ improved: string[]; worsened: string[]; added: string[]; resolved: string[]; unchanged: string[] }>(
+      '/ai/compare',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+
+  summarizeVisit: (payload: { previous?: string; current?: string }) =>
+    request<{ summary: string }>('/ai/summary', { method: 'POST', body: JSON.stringify(payload) }),
+
+  extractSection: (payload: { text: string; section: 'chart' | 'condition' | 'plan' }) =>
+    request<{ section: string; fields: Record<string, string> }>('/ai/extract', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  uploadTongue: (payload: { imageBase64: string; mime: string; name: string }) =>
+    request<{ url: string; name: string }>('/files/tongue', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** 上传录音，返回转写和拆好的主诉字段。不直接建档。 */
+  transcribeIntake: (payload: { audioBase64: string; mime: string }) =>
+    request<{ transcript: string; fields: Record<string, unknown> }>('/ai/intake-audio', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   searchKnowledge: (scope: 'external' | 'internal', q: string, topK = 8) =>
     request<Array<Record<string, unknown>>>(`/knowledge/${scope}${qs({ q, topK })}`),

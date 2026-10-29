@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Alert } from './ui/alert';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { buildCasePayload, CaseFields, EMPTY_CASE, FieldWrapper, splitList, type CaseFormState } from './CaseForm';
+import { buildCasePayload, CaseFields, EMPTY_CASE, type CaseFormState } from './CaseForm';
+import { applyIntakeDraft, VoiceIntake } from './VoiceIntake';
+import { EMPTY_PROFILE, PatientProfileFields, profileIssues, profilePayload, type PatientProfileValue } from './PatientProfileFields';
 import { api } from '../lib/api';
 
 interface Props { onCreated?: () => void | Promise<void>; }
-
-const EMPTY_PATIENT = { name: '', gender: '', age: '', phone: '', doctor: '', tags: '' };
 
 type Mode = 'patient' | 'patient+case';
 
@@ -19,33 +18,30 @@ type Mode = 'patient' | 'patient+case';
  */
 export function IntakeForm({ onCreated }: Props) {
   const [mode, setMode] = useState<Mode>('patient+case');
-  const [patient, setPatient] = useState(EMPTY_PATIENT);
+  const [patient, setPatient] = useState<PatientProfileValue>(EMPTY_PROFILE);
   const [caseForm, setCaseForm] = useState<CaseFormState>(EMPTY_CASE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [reveal, setReveal] = useState(0);
 
-  const updatePatient = (key: keyof typeof EMPTY_PATIENT, value: string) =>
-    setPatient((prev) => ({ ...prev, [key]: value }));
   const updateCase = (key: keyof CaseFormState, value: string) =>
     setCaseForm((prev) => ({ ...prev, [key]: value }));
 
   async function submit() {
     setError(null); setDone(null);
     if (!patient.name.trim()) return setError('请填写病患姓名');
-    if (mode === 'patient+case' && !caseForm.chiefComplaint.trim()) {
-      return setError('当前模式需要填写主诉；如暂不填写疾病信息，请切换为「仅病患信息」');
+    const issue = profileIssues(patient);
+    if (issue) {
+      setReveal((current) => current + 1);
+      return setError(issue);
+    }
+    if (mode === 'patient+case' && (!caseForm.chiefComplaint.trim() || !caseForm.presentIllness.trim())) {
+      return setError('初诊需要填写主诉和现病史；如暂不填写疾病信息，请切换为「仅病患信息」');
     }
     setSaving(true);
     try {
-      const created = await api.syncPatient({
-        name: patient.name.trim(),
-        gender: patient.gender || undefined,
-        age: patient.age ? Number(patient.age) : undefined,
-        phone: patient.phone || undefined,
-        doctor: patient.doctor || undefined,
-        tags: splitList(patient.tags),
-      } as never);
+      const created = await api.syncPatient(profilePayload(patient) as never);
 
       if (mode === 'patient+case') {
         const payload = buildCasePayload(caseForm, created.externalId ?? created.id);
@@ -53,7 +49,7 @@ export function IntakeForm({ onCreated }: Props) {
       }
 
       setDone(mode === 'patient+case' ? `已建档：${patient.name}（含首份就诊档案）` : `已建档：${patient.name}（疾病信息可后续补充）`);
-      setPatient(EMPTY_PATIENT);
+      setPatient(EMPTY_PROFILE);
       setCaseForm(EMPTY_CASE);
       await onCreated?.();
     } catch (err) { setError(String(err)); }
@@ -75,35 +71,19 @@ export function IntakeForm({ onCreated }: Props) {
           ))}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <FieldWrapper label="姓名" required>
-            <Input value={patient.name} onChange={(e) => updatePatient('name', e.target.value)} placeholder="张某某" />
-          </FieldWrapper>
-          <FieldWrapper label="性别" optional>
-            <Input value={patient.gender} onChange={(e) => updatePatient('gender', e.target.value)} placeholder="男 / 女" />
-          </FieldWrapper>
-          <FieldWrapper label="年龄" optional>
-            <Input value={patient.age} onChange={(e) => updatePatient('age', e.target.value)} placeholder="52" inputMode="numeric" />
-          </FieldWrapper>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <FieldWrapper label="联系手机" optional>
-            <Input value={patient.phone} onChange={(e) => updatePatient('phone', e.target.value)} placeholder="138****0000" />
-          </FieldWrapper>
-          <FieldWrapper label="主治医生" optional>
-            <Input value={patient.doctor} onChange={(e) => updatePatient('doctor', e.target.value)} placeholder="张医生" />
-          </FieldWrapper>
-          <FieldWrapper label="标签" optional hint="便于后续按病种聚合">
-            <Input value={patient.tags} onChange={(e) => updatePatient('tags', e.target.value)} placeholder="眩晕, 失眠" />
-          </FieldWrapper>
-        </div>
+        <PatientProfileFields reveal={reveal} value={patient} onChange={(patch) => setPatient((current) => ({ ...current, ...patch }))} />
 
         {mode === 'patient+case' ? (
           <>
             <div className="border-t border-border pt-4">
-              <p className="mb-3 text-xs font-medium text-foreground">疾病信息（首份就诊档案）</p>
+              <p className="mb-3 text-xs font-medium text-foreground">疾病信息</p>
+              <VoiceIntake
+                disabled={saving}
+                onDraft={(draft) => setCaseForm((prev) => applyIntakeDraft(prev, draft))}
+              />
+              <div className="mt-4">
               <CaseFields form={caseForm} onChange={updateCase} />
+              </div>
             </div>
           </>
         ) : (

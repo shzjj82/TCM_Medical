@@ -1,5 +1,6 @@
 import { IdCard } from 'lucide-react';
 import { pickField } from '../lib/coerce';
+import { soleCase } from '../lib/sole-case';
 import type { CaseRecord, Patient } from '../types';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -46,11 +47,7 @@ function mockCode(id: string): string {
 
 function resolveLatest(patient: Patient): CaseRecord | undefined {
   if (patient.latestCase) return patient.latestCase;
-  const cases = patient.cases ?? [];
-  if (!cases.length) return undefined;
-  const active = cases.filter((item) => item.status !== 'archived');
-  const pool = active.length ? active : cases;
-  return [...pool].sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')))[0];
+  return soleCase(patient.cases ?? []);
 }
 
 export function toPatientBrief(patient: Patient): PatientBriefData {
@@ -94,9 +91,11 @@ function Tag({ children, warn, className = '' }: { children: string; warn?: bool
 export function PatientBrief({
   data,
   onClick,
+  onEdit,
 }: {
   data: PatientBriefData;
   onClick?: () => void;
+  onEdit?: () => void;
 }) {
   const visits = data.visits === '—' ? '—' : `${data.visits} 次`;
   const className = 'flex w-full items-center gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3.5 text-left';
@@ -124,9 +123,19 @@ export function PatientBrief({
         </span>
       </span>
       <span className="flex min-w-0 shrink flex-col items-end gap-2">
-        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs ${STATUS_STYLE[data.status] ?? 'bg-slate-100 text-slate-500'}`}>
-          {data.status}
-        </span>
+        {onEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600 hover:border-[#c5e4df] hover:text-[#175055]"
+          >
+            编辑
+          </button>
+        ) : (
+          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs ${STATUS_STYLE[data.status] ?? 'bg-slate-100 text-slate-500'}`}>
+            {data.status}
+          </span>
+        )}
         <span className="flex flex-wrap justify-end gap-1.5">
           <Tag>{data.disease}</Tag>
           <Tag className="hidden lg:inline-flex">{data.syndrome}</Tag>

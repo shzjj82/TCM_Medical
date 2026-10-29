@@ -189,7 +189,7 @@ export function DiseaseDetail({ record, patient, archived, hasPlan, onBack, onRe
                 {patient?.phone || '手机未填'}
               </span>
               <span>初诊 {initialDate}</span>
-              <span>第 {record.caseNo} 档案{record.tcmDisease ? ` · ${record.tcmDisease}` : ''}</span>
+              {record.tcmDisease ? <span>{record.tcmDisease}</span> : null}
             </p>
             {tags.length ? (
               <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -226,7 +226,7 @@ export function DiseaseDetail({ record, patient, archived, hasPlan, onBack, onRe
                 还没有治疗记录。录入第一次治疗后，这里会按时间展开每次方案。
               </p>
             ) : (
-              <ol className="mt-4 max-h-64 space-y-4 overflow-y-auto pl-1">
+              <ol className="scrollbar-thin mt-4 max-h-64 space-y-4 overflow-y-auto pl-1">
                 {visits.map((visit, index) => (
                   <li key={visit.id} className="relative pl-5">
                     {index < visits.length - 1 ? (
@@ -263,7 +263,7 @@ export function DiseaseDetail({ record, patient, archived, hasPlan, onBack, onRe
         </div>
 
         <div className="mt-6 border-b border-slate-100">
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="scrollbar-thin flex gap-1 overflow-x-auto">
             {TABS.map((item) => {
               const active = tab === item.key;
               return (
@@ -332,7 +332,7 @@ export function DiseaseDetail({ record, patient, archived, hasPlan, onBack, onRe
                 <EmptyHint title="暂无诊疗方案记录" detail="点击右上角「录入治疗」，把每次取穴、方剂和医生原话记下来。" />
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  <div className="scrollbar-thin overflow-x-auto">
                     <table className="w-full min-w-[720px] text-left text-sm">
                       <thead>
                         <tr className="bg-slate-50 text-xs text-slate-400">

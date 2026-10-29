@@ -2,11 +2,12 @@ import {
   Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne,
   PrimaryGeneratedColumn, UpdateDateColumn,
 } from 'typeorm';
+import type { CaseDiagnosis, CaseExam, CaseHistory } from './case-clinical.entity';
 import { Patient } from './patient.entity';
 
 /**
  * 就诊档案（疾病信息）：一个病患可有多份档案（按疾病/疗程分开）。
- * 纯中医字段：主诉、现病史、中医病名、证型、舌脉、就诊方案，无西医诊断。
+ * 主诉正文留在本表；病史、中西医诊断、检验检查资料分表保存。
  * 归档后 status = archived，archive_snapshot 固化「病患信息 + 诊疗全过程」，
  * 同时写入内部知识库（internal_protocols）。
  */
@@ -37,6 +38,18 @@ export class CaseRecord {
   @Column({ name: 'present_illness', type: 'text', nullable: true })
   presentIllness?: string;
 
+  /** 月经、生育情况。 */
+  @Column({ name: 'menstrual_history', type: 'text', nullable: true })
+  menstrualHistory?: string;
+
+  /** 饮食、睡眠、二便、情志、运动情况。 */
+  @Column({ name: 'daily_condition', type: 'text', nullable: true })
+  dailyCondition?: string;
+
+  /** 体征。 */
+  @Column({ type: 'text', nullable: true })
+  signs?: string;
+
   @Column({ name: 'tcm_disease', nullable: true })
   tcmDisease?: string;
 
@@ -63,6 +76,10 @@ export class CaseRecord {
   @Column({ default: 'active' })
   status!: 'active' | 'archived';
 
+  /** 疗程结束方式。结案还会归档；转诊只锁定，不写入知识库。 */
+  @Column({ name: 'course_end', type: 'varchar', length: 16, nullable: true })
+  courseEnd?: 'closed' | 'referred' | null;
+
   @Column({ name: 'visit_count', type: 'int', default: 0 })
   visitCount!: number;
 
@@ -85,4 +102,9 @@ export class CaseRecord {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
+
+  /** 查询时挂上，不单独占列。 */
+  history?: CaseHistory;
+  diagnosis?: CaseDiagnosis;
+  exams?: CaseExam[];
 }

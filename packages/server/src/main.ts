@@ -1,11 +1,13 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Request, Response } from 'express';
+import { json, urlencoded, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 import { HealthController } from './health.controller';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
+  app.use(json({ limit: '12mb' }));
+  app.use(urlencoded({ extended: true, limit: '12mb' }));
   // 统一挂在 /api 前缀下：前端只需配置一个 BASE 就能同时访问 health 与业务接口。
   app.setGlobalPrefix('api');
   app.enableCors({ origin: true, credentials: true });

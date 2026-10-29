@@ -48,6 +48,22 @@ export class Visit {
   @Column({ name: 'visit_no', type: 'int' })
   visitNo!: number;
 
+  /** 初诊 first、复诊 return、结案 close、转诊 refer、随访 follow。旧数据为空时按就诊序号推断。 */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  kind?: 'first' | 'return' | 'close' | 'refer' | 'follow' | null;
+
+  /** 本次主诉。复诊另存一条，不覆盖初诊。 */
+  @Column({ name: 'chief_complaint', type: 'text', nullable: true })
+  chiefComplaint?: string | null;
+
+  /** 本次现病史。复诊另存一条，不覆盖初诊。 */
+  @Column({ name: 'present_illness', type: 'text', nullable: true })
+  presentIllness?: string | null;
+
+  /** 本次诊断和方案。复诊另存一条，不覆盖初诊。 */
+  @Column({ type: 'jsonb', nullable: true })
+  diagnosis?: Record<string, unknown> | null;
+
   @Column({ type: 'date' })
   date!: string;
 

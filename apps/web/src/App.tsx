@@ -3,6 +3,7 @@ import {
   BarChart3, BookOpen, ClipboardList, LayoutGrid, MessageSquare, Settings, Sparkles, User, UserRound, Wand2,
 } from 'lucide-react';
 import { Alert } from './components/ui/alert';
+import { Scrollbar } from './components/ui/scrollbar';
 import { AdvisePage } from './pages/AdvisePage';
 import { CaseDetailPage } from './pages/CaseDetailPage';
 import { KnowledgePage } from './pages/KnowledgePage';
@@ -88,7 +89,10 @@ export default function App() {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white md:rounded-[22px]">
-        <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-6">
+        <Scrollbar
+          className="min-h-0 flex-1"
+          viewportClassName="flex flex-col overscroll-contain pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-6"
+        >
           {healthError ? (
             <Alert tone="warn" title="服务端暂未连通">
               当前只能看到界面。请确认 PostgreSQL 已启动，并在项目根目录执行 pnpm dev。{healthError}
@@ -118,7 +122,7 @@ export default function App() {
           ) : (
             <SkillsPage />
           )}
-        </main>
+        </Scrollbar>
       </div>
 
       <nav

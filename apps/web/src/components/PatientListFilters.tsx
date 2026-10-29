@@ -4,6 +4,7 @@ import type { DuplicateGroup, PatientFacets } from '../lib/api';
 import { api } from '../lib/api';
 import type { ListQuery } from '../lib/route';
 import { Button } from './ui/button';
+import { Scrollbar } from './ui/scrollbar';
 import { FormSheet } from './ui/form-sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -40,7 +41,7 @@ function isFiltering(query: ListQuery) {
 export function PatientViewTabs({ query, onChange }: { query: ListQuery; onChange: (patch: Partial<ListQuery>) => void }) {
   const active = query.view || '';
   return (
-    <div className="scrollbar-thin flex shrink-0 gap-2 overflow-x-auto">
+    <Scrollbar className="shrink-0" viewportClassName="flex gap-2">
       {VIEWS.map((item) => {
         const selected = item.id === active;
         return (
@@ -57,7 +58,7 @@ export function PatientViewTabs({ query, onChange }: { query: ListQuery; onChang
           </button>
         );
       })}
-    </div>
+    </Scrollbar>
   );
 }
 
@@ -93,9 +94,9 @@ export function PatientFilterSidebar({ open, query, facets, onChange, onOpenDupl
             </button>
           ) : null}
         </div>
-        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <Scrollbar className="min-h-0 flex-1" viewportClassName="flex flex-col gap-4">
           <FilterFields query={query} facets={facets} onChange={onChange} />
-        </div>
+        </Scrollbar>
         <Button variant="outline" className="w-full shrink-0 border-slate-200" onClick={onOpenDuplicates}>
           重复档案{duplicateCount ? ` ${duplicateCount}` : ''}
         </Button>

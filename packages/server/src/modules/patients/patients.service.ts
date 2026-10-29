@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { PatientContact } from '../../entities/patient-contact.entity';
 import { Patient } from '../../entities/patient.entity';
 import { CaseRecord } from '../../entities/case-record.entity';
 import { Visit } from '../../entities/visit.entity';
+import { DEFAULT_GENDER, readGender } from '../../common/dicts';
+import { ageFromBirth, encryptIdCard, maskIdCard, normalizeIdCard, normalizePhone, parseBirthDate } from '../../common/id-card';
 import { isUuid, normalizeDate, pick, toArray } from '../../common/payload';
 import { CasesService } from '../cases/cases.service';
 
@@ -58,6 +61,7 @@ export interface PatientListResult {
 export class PatientsService {
   constructor(
     @InjectRepository(Patient) private readonly repo: Repository<Patient>,
+    @InjectRepository(PatientContact) private readonly contacts: Repository<PatientContact>,
     @InjectRepository(CaseRecord) private readonly caseRepo: Repository<CaseRecord>,
     @InjectRepository(Visit) private readonly visitRepo: Repository<Visit>,
     private readonly cases: CasesService,
@@ -123,6 +127,52 @@ export class PatientsService {
     return found;
   }
 
+  /** 编辑病患基本信息。身份证只写密文和掩码，不回传明文。 */
+  async updateProfile(key: string, payload: Record<string, unknown>) {
+    const found = await this.findOne(key);
+    const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+    if (!name) throw new BadRequestException('请填写病患姓名');
+    const birthDate = parseBirthDate(payload.birthDate ?? payload.birth_date);
+    const age = birthDate ? ageFromBirth(birthDate) : null;
+    const storedGender = found.gender === '女' ? '女' : DEFAULT_GENDER;
+    const privacyConsent = readConsent(payload.privacyConsent ?? payload.privacy_consent, found.privacyConsent);
+    const aiConsent = readConsent(payload.aiConsent ?? payload.ai_consent, found.aiConsent);
+    const idCard = readIdCardUpdate(payload);
+    const tags = Array.isArray(payload.tags)
+      ? payload.tags.map((item) => String(item).trim()).filter(Boolean)
+      : found.tags;
+    await this.repo.update(found.id, {
+      name,
+      gender: readGender(payload.gender, storedGender),
+      birthDate,
+      age,
+      phone: normalizePhone(payload.phone),
+      occupation: blankToNull(payload.occupation),
+      residence: blankToNull(payload.residence),
+      source: blankToNull(payload.source),
+      doctor: blankToNull(payload.doctor),
+      tags,
+      privacyConsent,
+      aiConsent,
+      privacyConsentAt: privacyConsent === found.privacyConsent ? found.privacyConsentAt : new Date(),
+      aiConsentAt: aiConsent === found.aiConsent ? found.aiConsentAt : new Date(),
+      ...idCard,
+    } as never);
+    await this.saveEmergency(found.id, payload.emergencyContacts ?? payload.emergency_contacts ?? payload.emergencyContact ?? payload.emergency_contact);
+    return this.present(await this.findOne(found.id));
+  }
+
+  async present(patient: Patient) {
+    const emergencyContacts = await this.contacts.find({
+      where: { patientId: patient.id, role: 'emergency' },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+    const view = { ...patient } as Patient & { idCardCipher?: string; emergencyContacts: PatientContact[] };
+    delete view.idCardCipher;
+    view.emergencyContacts = emergencyContacts;
+    return view;
+  }
+
   /** 幂等同步：externalId 命中则更新，否则新建。 */
   async sync(payload: Record<string, any>): Promise<Patient> {
     // payload 里的 id 有可能是 Skill 侧外部 ID（P-2026-001），也有可能是数据库 uuid，
@@ -143,10 +193,25 @@ export class PatientsService {
     const entity = found ?? this.repo.create();
     entity.externalId = externalId ?? entity.externalId;
     entity.name = pick<string>(payload, ['name']) ?? entity.name ?? '未具名';
-    entity.gender = pick(payload, ['gender']) ?? entity.gender;
-    entity.age = pick(payload, ['age']) ?? entity.age;
-    entity.phone = pick(payload, ['phone']) ?? entity.phone;
+    const gender = pick(payload, ['gender']);
+    if (gender !== undefined) entity.gender = readGender(gender, entity.gender === '女' ? '女' : DEFAULT_GENDER);
+    else if (entity.gender !== '男' && entity.gender !== '女') entity.gender = DEFAULT_GENDER;
+    const birth = pick(payload, ['birthDate', 'birth_date']);
+    if (birth !== undefined) entity.birthDate = parseBirthDate(birth);
+    if (entity.birthDate) entity.age = ageFromBirth(String(entity.birthDate).slice(0, 10));
+    else if (pick(payload, ['age']) !== undefined) entity.age = readAge(pick(payload, ['age']));
+    const phone = pick(payload, ['phone']);
+    if (phone !== undefined) entity.phone = normalizePhone(phone) ?? undefined;
+    entity.occupation = pick(payload, ['occupation']) ?? entity.occupation;
+    entity.residence = pick(payload, ['residence']) ?? entity.residence;
+    entity.source = pick(payload, ['source']) ?? entity.source;
     entity.doctor = pick(payload, ['doctor']) ?? entity.doctor;
+    const idCard = pick<string>(payload, ['idCard', 'id_card']);
+    if (idCard) {
+      const normalized = normalizeIdCard(idCard);
+      entity.idCardCipher = encryptIdCard(normalized);
+      entity.idCardMask = maskIdCard(normalized);
+    }
     entity.tags = toArray(pick(payload, ['tags'])) ?? entity.tags ?? [];
     entity.status = pick<'active' | 'paused' | 'closed'>(payload, ['status']) ?? entity.status ?? 'active';
     entity.visitCount = Number(pick(payload, ['visitCount', 'visit_count']) ?? entity.visitCount ?? 0);
@@ -157,7 +222,32 @@ export class PatientsService {
     if (initial && (!initial.date || typeof initial.date !== 'string')) {
       (initial as Record<string, unknown>).date = normalizeDate(pick(payload, ['createdAt', 'created_at'])) ?? new Date().toISOString().slice(0, 10);
     }
-    return this.repo.save(entity);
+    const saved = await this.repo.save(entity);
+    if (
+      payload.emergencyContacts !== undefined || payload.emergency_contacts !== undefined
+      || payload.emergencyContact !== undefined || payload.emergency_contact !== undefined
+    ) {
+      await this.saveEmergency(
+        saved.id,
+        payload.emergencyContacts ?? payload.emergency_contacts ?? payload.emergencyContact ?? payload.emergency_contact,
+      );
+    }
+    return this.present(saved);
+  }
+
+  /** 整表替换该患者的紧急联系人。空行略过，传入空数组则清空。 */
+  private async saveEmergency(patientId: string, value: unknown) {
+    const list = Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [];
+    await this.contacts.delete({ patientId, role: 'emergency' });
+    const rows = list.flatMap((item, index) => {
+      const contact = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      const name = blankToNull(contact.name);
+      const relation = blankToNull(contact.relation);
+      const phone = blankToNull(contact.phone);
+      if (!name && !relation && !phone) return [];
+      return [this.contacts.create({ patientId, role: 'emergency', name, relation, phone, sortOrder: index })];
+    });
+    if (rows.length) await this.contacts.save(rows);
   }
 
   async facets(): Promise<PatientFacets> {
@@ -345,15 +435,45 @@ export class PatientsService {
     return `EXISTS (SELECT 1 FROM ${table} c WHERE c.${patientCol} = p.id ${extra})`;
   }
 
-  private table(repo: Repository<CaseRecord | Visit>): string {
+  private table(repo: Repository<CaseRecord> | Repository<Visit>): string {
     return `"${repo.metadata.tableName}"`;
   }
 
-  private quoted(repo: Repository<CaseRecord | Visit>, property: string): string {
+  private quoted(repo: Repository<CaseRecord> | Repository<Visit>, property: string): string {
     const column = repo.metadata.findColumnWithPropertyName(property);
     if (!column) throw new Error(`未知字段 ${property}`);
     return `"${column.databaseName}"`;
   }
+}
+
+const CONSENTS = ['unknown', 'granted', 'revoked'] as const;
+type Consent = (typeof CONSENTS)[number];
+
+function readConsent(value: unknown, current: Consent = 'unknown'): Consent {
+  if (value === undefined || value === null || value === '') return current ?? 'unknown';
+  if (!CONSENTS.includes(value as Consent)) throw new BadRequestException('授权状态不正确');
+  return value as Consent;
+}
+
+function readAge(value: unknown): number | null {
+  if (value === '' || value === null || value === undefined) return null;
+  const age = Number(value);
+  if (!Number.isFinite(age) || age < 0 || age > 150) throw new BadRequestException('年龄不正确');
+  return age;
+}
+
+function readIdCardUpdate(payload: Record<string, unknown>): { idCardCipher?: string | null; idCardMask?: string | null } {
+  if (!('idCard' in payload) && !('id_card' in payload)) return {};
+  const raw = 'idCard' in payload ? payload.idCard : payload.id_card;
+  if (raw === null || raw === '') return { idCardCipher: null, idCardMask: null };
+  const normalized = normalizeIdCard(String(raw));
+  return { idCardCipher: encryptIdCard(normalized), idCardMask: maskIdCard(normalized) };
+}
+
+function blankToNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function phoneKey(phone?: string): string {
@@ -367,8 +487,8 @@ function toDuplicate(row: Patient): DuplicatePatient {
     externalId: row.externalId,
     name: row.name,
     phone: row.phone,
-    gender: row.gender,
-    age: row.age,
+    gender: row.gender ?? undefined,
+    age: row.age ?? undefined,
     doctor: row.doctor,
     visitCount: row.visitCount ?? 0,
     tags: row.tags ?? [],

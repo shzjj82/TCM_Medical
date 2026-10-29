@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CasesService } from '../cases/cases.service';
 import { PatientsService } from './patients.service';
 import { VisitsService } from './visits.service';
@@ -56,6 +56,12 @@ export class PatientsController {
     return this.patients.merge(body.primaryId, body.duplicateId);
   }
 
+  /** 只改病患基本信息，不动就诊档案和疗效对比。 */
+  @Patch(':key')
+  update(@Param('key') key: string, @Body() body: Record<string, unknown>) {
+    return this.patients.updateProfile(key, body);
+  }
+
   /** 病人详情 + 全部就诊档案 + 全部复诊记录，前端病人详情页一次拿全。 */
   @Get(':key')
   async detail(@Param('key') key: string) {
@@ -64,7 +70,7 @@ export class PatientsController {
       this.cases.listByPatient(key),
       this.visits.listForPatient(patient.externalId ?? patient.id),
     ]);
-    return { ...patient, cases, visits };
+    return { ...(await this.patients.present(patient)), cases, visits };
   }
 
   @Post('sync')
