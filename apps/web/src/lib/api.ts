@@ -52,22 +52,35 @@ export interface DashboardSummary {
 }
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
+const BIZ_CODE = (import.meta.env.VITE_BIZ_CODE as string | undefined) ?? 'medical';
 
 function authHeader(): Record<string, string> {
   const token = readSession()?.token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function readError(res: Response): Promise<string> {
-  const detail = await res.text();
-  try {
-    const body = JSON.parse(detail) as { message?: string | string[] };
-    if (typeof body.message === 'string' && body.message) return body.message;
-    if (Array.isArray(body.message) && body.message.length) return body.message.join('；');
-  } catch {
-    /* 非 JSON 时退回原文 */
+function messageOf(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const raw = (body as { message?: unknown }).message;
+  if (typeof raw === 'string' && raw.trim()) return raw;
+  if (Array.isArray(raw) && raw.length) return raw.map(String).join('；');
+  return null;
+}
+
+/** 网关统一包一层 { success, code, message, data }；直连 TCM server 时仍是裸 JSON。 */
+function unwrap<T>(body: unknown): T {
+  if (
+    body &&
+    typeof body === 'object' &&
+    'success' in body &&
+    'data' in body &&
+    'code' in body
+  ) {
+    const envelope = body as { success: boolean; message?: string; data: T | null };
+    if (!envelope.success) throw new Error(envelope.message || '请求失败');
+    return envelope.data as T;
   }
-  return detail.slice(0, 200) || `${res.status}`;
+  return body as T;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -75,6 +88,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      'X-Biz-Code': BIZ_CODE,
       ...authHeader(),
       ...(init?.headers ?? {}),
     },
@@ -92,12 +106,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     window.history.replaceState(null, '', '/403');
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
-  if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as T;
+  const raw = await res.text();
+  let parsed: unknown = null;
+  if (raw) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+  }
+  if (!res.ok) throw new Error(messageOf(parsed) || raw.slice(0, 200) || `${res.status}`);
+  return unwrap<T>(parsed);
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; ai: Record<string, unknown> }>('/health'),
+  health: () => request<{ ok?: boolean; status?: string; ai?: Record<string, unknown> }>('/health'),
 
   login: (username: string, password: string) =>
     request<{ token: string; user: SessionUser }>('/auth/login', {
