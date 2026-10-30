@@ -88,7 +88,7 @@ export function IntakeForm({ onCreated }: Props) {
           </>
         ) : (
           <p className="rounded-md bg-secondary/50 p-3 text-xs text-muted-foreground">
-            仅保存病患基本信息。就诊档案（主诉 / 现病史 / 就诊方案）可稍后在病患详情页「新增档案」。
+            仅保存病患基本信息。就诊档案（主诉 / 现病史 / 就诊方案）可稍后在病患详情页「初诊」。
           </p>
         )}
 

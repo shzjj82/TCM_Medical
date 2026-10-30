@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiModule } from './modules/ai/ai.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { CasesModule } from './modules/cases/cases.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { HealthController } from './health.controller';
@@ -26,6 +28,8 @@ import { FilesController } from './modules/files/files.controller';
         logging: process.env.DB_LOGGING === 'true',
       }),
     }),
+    AuthModule,
+    DashboardModule,
     PatientsModule,
     CasesModule,
     KnowledgeModule,

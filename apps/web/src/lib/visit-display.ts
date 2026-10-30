@@ -1,4 +1,4 @@
-import { FileText, Image as ImageIcon, Mic } from 'lucide-react';
+import { Image as ImageIcon, Mic } from 'lucide-react';
 import { pickArray, pickField, pickNumber } from './coerce';
 import type { Visit } from '../types';
 
@@ -19,7 +19,6 @@ export function channelIcons(channels: string[]) {
   const icons = [];
   if (/voice|audio|speech|语音/.test(joined)) icons.push(Mic);
   if (/image|photo|picture|ocr|舌/.test(joined)) icons.push(ImageIcon);
-  if (/note|text|doc|病历|doctor/.test(joined) || icons.length === 0 && channels.length > 0) icons.push(FileText);
   return icons;
 }
 

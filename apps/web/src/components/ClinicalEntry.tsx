@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 const controlClass = 'rounded-lg border-slate-200 bg-white shadow-none focus-visible:border-[#175055] focus-visible:ring-0';
 
 export type ClinicalTab = 'chart' | 'condition' | 'plan';
+export const CLINICAL_TABS: ClinicalTab[] = ['chart', 'condition', 'plan'];
 type AssistMode = 'voice' | 'file' | 'audio';
 
 export interface ClinicalValue {
@@ -26,6 +27,22 @@ export interface ClinicalValue {
   acupoints: string;
   prescriptions: string;
   lifestyle: string;
+}
+
+export function nextClinicalTab(tab: ClinicalTab): ClinicalTab | null {
+  const index = CLINICAL_TABS.indexOf(tab);
+  return index >= 0 && index < CLINICAL_TABS.length - 1 ? CLINICAL_TABS[index + 1] : null;
+}
+
+/** 当前页必填未完成时返回提示，通过则返回 null。 */
+export function clinicalTabIssue(tab: ClinicalTab, value: ClinicalValue): string | null {
+  if (tab !== 'chart') return null;
+  const missing = [
+    !value.chiefComplaint.trim() ? '主诉' : '',
+    !value.presentIllness.trim() ? '现病史' : '',
+  ].filter(Boolean);
+  if (!missing.length) return null;
+  return `请填写${missing.join('和')}`;
 }
 
 export interface TongueDraft {

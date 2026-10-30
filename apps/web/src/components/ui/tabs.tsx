@@ -60,7 +60,7 @@ export const Tabs = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & 
           ref={variant === 'line' ? barRef : undefined}
           className={cn(
             variant === 'line'
-              ? 'scrollbar-thin relative flex min-w-0 flex-1 gap-6 overflow-x-auto'
+              ? 'scrollbar-none relative flex min-w-0 flex-1 gap-6 overflow-x-auto'
               : 'inline-flex h-9 items-center gap-1 rounded-md bg-secondary p-1',
             variant !== 'line' && fill && 'flex w-full',
           )}

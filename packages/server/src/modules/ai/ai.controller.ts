@@ -10,6 +10,18 @@ export class AiController {
     return this.ai.status();
   }
 
+  /** 医生对话：按患者和知识库范围回答，必须带来源。 */
+  @Post('chat')
+  chat(@Body() body: {
+    message?: string;
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    patientId?: string;
+    scopes?: { patient?: boolean; internal?: boolean; external?: boolean };
+    answerMode?: 'summary' | 'review' | 'advise' | 'teach';
+  }) {
+    return this.ai.chat(body ?? {});
+  }
+
   /** 治疗建议：外部参考库 + 内部资料库 + 本院医案，联合给出带来源的方案。 */
   @Post('advise')
   advise(

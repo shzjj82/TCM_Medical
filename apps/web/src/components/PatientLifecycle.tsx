@@ -107,13 +107,12 @@ export function PatientLifecycle({
           latestLines={shownLatest}
           visitTotal={visitTotal}
           visits={caseVisits}
-          onOpen={() => current && onOpenCase(current.externalId ?? current.id)}
         />
       ) : null}
 
       <div className={`flex min-h-0 flex-1 flex-col ${showCourse ? 'mt-4 border-t border-slate-100 pt-2' : ''}`}>
         <div className="flex shrink-0 items-end gap-3">
-          <div ref={barRef} className="relative flex min-w-0 flex-1 gap-6 overflow-x-auto">
+          <div ref={barRef} className="scrollbar-none relative flex min-w-0 flex-1 gap-6 overflow-x-auto">
             {TABS.map((item) => (
               <button
                 key={item.id}
@@ -184,9 +183,9 @@ export function PatientLifecycle({
             onOpen={current ? () => onOpenCase(current.externalId ?? current.id) : undefined}
           />
         ) : null}
-        {tab === 'exam' ? <EmptyState text="暂无检查报告" kind="search" /> : null}
+        {tab === 'exam' ? <EmptyState text="暂无检查报告" /> : null}
         {tab === 'follow' ? (
-          follows.length === 0 ? <EmptyState text="暂无随访记录" kind="idle" /> : (
+          follows.length === 0 ? <EmptyState text="暂无随访记录" /> : (
             <ul className="divide-y divide-slate-100">
               {follows.map((item) => (
                 <li key={item.id} className="py-3 text-sm text-slate-600">
@@ -197,7 +196,7 @@ export function PatientLifecycle({
             </ul>
           )
         ) : null}
-        {tab === 'fee' ? <EmptyState text="暂无费用记录" kind="missing" /> : null}
+        {tab === 'fee' ? <EmptyState text="暂无费用记录" /> : null}
         </Scrollbar>
       </div>
     </section>
@@ -205,7 +204,7 @@ export function PatientLifecycle({
 }
 
 function RecordPane({ record }: { record?: CaseRecord }) {
-  if (!record) return <EmptyState text="暂无病历" kind="empty" />;
+  if (!record) return <EmptyState text="暂无病历" />;
   const plan = record.treatmentPlan;
   const diagnosis = record.diagnosis;
   const rows = linesOf([
@@ -225,7 +224,7 @@ function RecordPane({ record }: { record?: CaseRecord }) {
     ['方剂', (plan?.prescriptions ?? []).join('、')],
     ['调摄', (plan?.lifestyle ?? []).join('、')],
   ]);
-  if (rows.length === 0) return <EmptyState text="暂无病历详情" kind="empty" />;
+  if (rows.length === 0) return <EmptyState text="暂无病历详情" />;
   return (
     <div className="grid gap-3 py-4 sm:grid-cols-2">
       {rows.map(([label, value]) => (
@@ -248,10 +247,10 @@ function PlanTable({
   onToggle: () => void;
   onOpen?: () => void;
 }) {
-  if (total === 0) return <EmptyState text="暂无诊疗方案" kind="idle" />;
+  if (total === 0) return <EmptyState text="暂无诊疗方案" />;
   return (
     <div>
-      <div className="scrollbar-thin overflow-x-auto">
+      <div className="scrollbar-none overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
             <tr className="text-xs text-slate-400">

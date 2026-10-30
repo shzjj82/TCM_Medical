@@ -3,7 +3,7 @@ import { Alert } from './ui/alert';
 import { Button } from './ui/button';
 import { FormSheet } from './ui/form-sheet';
 import { Input, Label, Textarea } from './ui/input';
-import { ClinicalEntry, uploadTongue, type ClinicalTab, type TongueDraft } from './ClinicalEntry';
+import { CLINICAL_TABS, ClinicalEntry, clinicalTabIssue, nextClinicalTab, uploadTongue, type ClinicalTab, type TongueDraft } from './ClinicalEntry';
 import { api } from '../lib/api';
 
 const controlClass = 'rounded-lg border-slate-200 bg-white shadow-none focus-visible:border-[#175055] focus-visible:ring-0';
@@ -228,12 +228,40 @@ export function CaseForm({ patientKey, aiAllowed = false, onClose, onCreated }: 
   const [error, setError] = useState<string | null>(null);
 
   const update = (key: keyof CaseFormState, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const nextTab = nextClinicalTab(tab);
+
+  function goTab(next: ClinicalTab) {
+    const forward = CLINICAL_TABS.indexOf(next) > CLINICAL_TABS.indexOf(tab);
+    if (forward) {
+      const issue = clinicalTabIssue(tab, form);
+      if (issue) {
+        setError(issue);
+        return;
+      }
+    }
+    setError(null);
+    setTab(next);
+  }
+
+  function goNext() {
+    const issue = clinicalTabIssue(tab, form);
+    if (issue) {
+      setError(issue);
+      return;
+    }
+    if (nextTab) {
+      setError(null);
+      setTab(nextTab);
+      return;
+    }
+    void submit(true);
+  }
 
   async function submit(confirm: boolean) {
     setError(null);
     if (!form.chiefComplaint.trim() || !form.presentIllness.trim()) {
       setTab('chart');
-      return setError('初诊需要填写主诉和现病史');
+      return setError('请填写主诉和现病史');
     }
     const payload = buildCasePayload(form, patientKey);
     if (!payload) {
@@ -271,14 +299,14 @@ export function CaseForm({ patientKey, aiAllowed = false, onClose, onCreated }: 
           {error ? <Alert tone="danger">{error}</Alert> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" className="border-slate-200" onClick={onClose} disabled={saving}>取消</Button>
-            <Button type="button" onClick={() => void submit(true)} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
+            <Button type="button" onClick={goNext} disabled={saving}>{saving ? '保存中…' : nextTab ? '下一步' : '保存'}</Button>
           </div>
         </div>
       )}
     >
       <ClinicalEntry
         tab={tab}
-        onTab={setTab}
+        onTab={goTab}
         value={form}
         onChange={update}
         tongue={tongue}

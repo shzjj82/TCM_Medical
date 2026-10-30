@@ -8,13 +8,15 @@ import { Scrollbar } from '../components/ui/scrollbar';
 import { IntakeForm } from '../components/IntakeForm';
 import { DuplicateSheet, PatientFilterButton, PatientFilterSidebar, PatientListFilters, PatientViewTabs } from '../components/PatientListFilters';
 import { PatientBrief, toPatientBrief } from '../components/PatientBrief';
+import { EmptyState } from '../components/ui/empty-state';
+import { PatientBriefSkeleton, PatientListSkeleton } from '../components/ui/skeleton';
 import { api, type PatientFacets } from '../lib/api';
-import { listHref, readListQuery, rememberList, type ListQuery } from '../lib/route';
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES, listHref, readListQuery, rememberList, type ListQuery } from '../lib/route';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import type { Patient } from '../types';
 
 interface Props { onOpen: (key: string) => void; }
 
-const PAGE_SIZE = 2;
 const DESKTOP_QUERY = '(min-width: 768px)';
 
 const EMPTY_FACETS: PatientFacets = { diseases: [], syndromes: [], tags: [], doctors: [] };
@@ -24,7 +26,7 @@ export function PatientsPage({ onOpen }: Props) {
   const [keyword, setKeyword] = useState(() => readListQuery().q);
   const [rows, setRows] = useState<Patient[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showIntake, setShowIntake] = useState(false);
@@ -52,13 +54,16 @@ export function PatientsPage({ onOpen }: Props) {
   const loadPage = useCallback(async (nextPage: number, append: boolean) => {
     const ticket = ++requestRef.current;
     if (append) setLoadingMore(true);
-    else setLoading(true);
+    else {
+      setLoading(true);
+      if (nextPage === 1) setRows([]);
+    }
     setError(null);
     try {
       const result = await api.listPatients({
         keyword: query.q || undefined,
         page: nextPage,
-        pageSize: PAGE_SIZE,
+        pageSize: query.pageSize || DEFAULT_PAGE_SIZE,
         disease: query.disease || undefined,
         syndrome: query.syndrome || undefined,
         course: query.course || undefined,
@@ -135,7 +140,8 @@ export function PatientsPage({ onOpen }: Props) {
   }, [desktop, loading, loadPage, page, rows.length, total]);
 
   const view = rows.map(toPatientBrief);
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageSize = query.pageSize || DEFAULT_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const filtering = Boolean(query.q || query.view || query.disease || query.syndrome || query.course || query.tag || query.doctor || query.visit);
 
   function patchQuery(patch: Partial<ListQuery>) {
@@ -154,7 +160,7 @@ export function PatientsPage({ onOpen }: Props) {
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
+        <div className="hidden min-w-0 md:block">
           <h1 className="text-lg font-semibold tracking-tight text-slate-800">患者管理</h1>
           <p className="mt-1 hidden text-xs text-slate-400 2xl:block">从列表进入患者，查看疾病档案与全周期疗效</p>
         </div>
@@ -209,17 +215,27 @@ export function PatientsPage({ onOpen }: Props) {
       />
       {error ? <Alert tone="danger">{error}</Alert> : null}
 
-      <Scrollbar ref={listRef} className="min-h-0 flex-1">
+      <Scrollbar ref={listRef} className="min-h-0 flex-1" viewportClassName="flex min-h-full flex-col">
         {view.length === 0 ? (
-          <p className="py-16 text-center text-sm text-slate-400">
-            {loading ? '加载中…' : filtering ? '没有符合当前筛选的患者' : '暂无患者，点击「建档」录入第一位'}
-          </p>
+          loading ? (
+            <PatientListSkeleton />
+          ) : (
+            <EmptyState
+              kind={filtering ? 'search' : 'empty'}
+              text={filtering ? '没有符合当前筛选的患者' : '暂无患者，点击「建档」录入第一位'}
+            />
+          )
         ) : (
           <div className="flex flex-col gap-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-1">
             {view.map((row) => <PatientBrief key={row.key} data={row} onClick={() => onOpen(row.key)} />)}
-            {desktop ? null : (
+            {desktop ? null : loadingMore ? (
+              <>
+                <PatientBriefSkeleton />
+                <PatientBriefSkeleton />
+              </>
+            ) : (
               <div ref={sentinelRef} className="py-3 text-center text-xs text-slate-400">
-                {loadingMore ? '加载中…' : rows.length >= total ? '没有更多了' : '上滑加载更多'}
+                {rows.length >= total ? '没有更多了' : '上滑加载更多'}
               </div>
             )}
           </div>
@@ -228,7 +244,22 @@ export function PatientsPage({ onOpen }: Props) {
       {desktop ? (
         <div className="flex shrink-0 items-center justify-between gap-3 text-xs text-slate-500">
           <span>共 {total} 条</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <span className="shrink-0">每页</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => commitQuery({ ...query, pageSize: Number(value), page: 1 }, 'push')}
+            >
+              <SelectTrigger aria-label="每页条数" className="h-8 w-[4.75rem] px-2 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-1">
             <Button variant="outline" className="h-8 border-slate-200 px-2" disabled={page <= 1 || loading} onClick={() => commitQuery({ ...query, page: page - 1 }, 'push')}>
               上一页
             </Button>
@@ -246,6 +277,7 @@ export function PatientsPage({ onOpen }: Props) {
             <Button variant="outline" className="h-8 border-slate-200 px-2" disabled={page >= pageCount || loading} onClick={() => commitQuery({ ...query, page: page + 1 }, 'push')}>
               下一页
             </Button>
+            </div>
           </div>
         </div>
       ) : null}

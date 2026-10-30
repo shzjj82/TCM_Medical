@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
+import { EmptyState } from '../components/ui/empty-state';
+import { CaseDetailSkeleton } from '../components/ui/skeleton';
 import { DiseaseDetail } from '../components/DiseaseDetail';
 import { api } from '../lib/api';
 import type { CaseRecord, Patient } from '../types';
@@ -16,7 +17,7 @@ interface Props {
 export function CaseDetailPage({ caseKey, patientKey, onBack }: Props) {
   const [record, setRecord] = useState<CaseRecord | null>(null);
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -46,8 +47,17 @@ export function CaseDetailPage({ caseKey, patientKey, onBack }: Props) {
     finally { setArchiving(false); }
   }
 
-  if (loading && !record) return <Card className="p-6 text-sm text-muted-foreground">加载中…</Card>;
-  if (!record) return <Alert tone="danger">{error ?? '未找到该档案'}</Alert>;
+  if (loading && !record) return <CaseDetailSkeleton />;
+  if (!record) {
+    return (
+      <EmptyState
+        kind="missing"
+        title="未找到该档案"
+        text={error ?? '疾病档案可能已删除或编号有误。'}
+        action={<Button variant="outline" className="border-slate-200" onClick={onBack}>返回患者</Button>}
+      />
+    );
+  }
 
   const archived = record.status === 'archived';
   const plan = record.treatmentPlan ?? {};

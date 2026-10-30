@@ -1,5 +1,15 @@
 export type ReviewStatus = 'pending' | 'confirmed' | 'rejected';
 
+export type UserRole = 'doctor' | 'assistant';
+
+export interface SessionUser {
+  id: string;
+  username: string;
+  name: string;
+  role: UserRole;
+  title: string;
+}
+
 export interface Condition {
   date?: string;
   chief_complaint?: string;

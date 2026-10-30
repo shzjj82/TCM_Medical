@@ -60,9 +60,15 @@ export function FormSheet({ open, title, onClose, children, footer, layer = 'bas
             <X className="h-4 w-4" />
           </button>
         </div>
-        <Scrollbar className="min-h-0 flex-1" viewportClassName={`${fill ? 'flex flex-col' : ''} px-4 md:px-5 ${footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-5'}`}>
-          {children}
-        </Scrollbar>
+        {fill ? (
+          <Scrollbar className="min-h-0 flex-1" viewportClassName="flex flex-col px-4 md:px-5 pb-4">
+            {children}
+          </Scrollbar>
+        ) : (
+          <div className={`min-h-0 flex-auto overflow-y-auto px-4 md:px-5 ${footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-5'}`}>
+            {children}
+          </div>
+        )}
         {footer ? (
           <div className="shrink-0 border-t border-slate-100 bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-5 md:pb-4">
             {footer}

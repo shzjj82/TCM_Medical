@@ -23,6 +23,15 @@ const EMERGENCY_FLAGS = [
 
 const DISCLAIMER = '本内容由 AI 辅助生成，须经执业医师审核后使用，不得直接作为处方交付患者。';
 
+const CHAT_SYSTEM = `你是中医诊所里给医生用的助手，不直接面向患者。
+规则：
+1. 区分档案事实、医生记录和你的推测，推测必须标明；
+2. 只依据【资料范围】作答；没有依据时写明「模型通用知识，无本地资料支持」，禁止伪造文献、页码或医案编号；
+3. 治疗建议必须带来源；内部医案须说明样本量局限；
+4. 高风险、急重症、禁忌必须提醒医生复核；
+5. 不得给出患者可直接执行的侵入性操作指导；
+6. 只输出 JSON 对象。`;
+
 const ADVISE_SYSTEM = `你是给中医师提供决策支持的助手（不直接面向患者开方）。
 规则：
 1. 只依据【参考资料】作答，每条建议用 [来源ID] 标注出处；
@@ -133,6 +142,135 @@ export class AiService {
       result.mode = 'rule_based_fallback';
       result.plan = { note: 'AI 生成失败，以下仅为资料库命中结果。', error: String(error).slice(0, 300) };
       return result;
+    }
+  }
+
+  /** 医生对话：按勾选范围检索患者记录和知识库，回答必须带来源。 */
+  async chat(input: {
+    message?: string;
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    patientId?: string;
+    scopes?: { patient?: boolean; internal?: boolean; external?: boolean };
+    answerMode?: 'summary' | 'review' | 'advise' | 'teach';
+  }): Promise<{
+    mode: 'llm' | 'rule_based' | 'rule_based_fallback';
+    conclusion: string;
+    evidence: string[];
+    citations: Array<{ kind: string; title: string; note?: string }>;
+    risks: string[];
+    missing: string[];
+    disclaimer: string;
+  }> {
+    const question = String(input.message ?? '').trim();
+    if (!question) throw new BadRequestException('请输入问题');
+    const scopes = {
+      patient: Boolean(input.scopes?.patient && input.patientId),
+      internal: input.scopes?.internal !== false,
+      external: input.scopes?.external !== false,
+    };
+    const answerMode = input.answerMode ?? 'summary';
+    const teach = answerMode === 'teach';
+
+    let patientBlock = '';
+    let patientLabel = '';
+    if (scopes.patient && input.patientId) {
+      try {
+        const patient = await this.patients.findOne(input.patientId);
+        const key = patient.externalId ?? patient.id;
+        const name = teach ? `${String(patient.name || '某').slice(0, 1)}某` : patient.name;
+        patientLabel = name;
+        const initial = (patient.initialCondition ?? {}) as Record<string, unknown>;
+        const current = (patient.currentCondition ?? initial) as Record<string, unknown>;
+        const visits = await this.visits.listForPatient(key).catch(() => []);
+        patientBlock = [
+          `患者：${name}　${patient.gender ?? ''}　${patient.age ?? ''}岁`.trim(),
+          `已诊疗 ${patient.visitCount} 次`,
+          `主诉：${pick(initial, ['chief_complaint', 'chiefComplaint']) ?? '—'}`,
+          `现病史：${pick(initial, ['present_illness', 'presentIllness']) ?? '—'}`,
+          `当前：${pick(current, ['summary']) ?? '—'}`,
+          `病名：${pick(current, ['tcm_disease', 'tcmDisease']) ?? '—'}　证型：${pick(current, ['tcm_syndrome', 'tcmSyndrome']) ?? '—'}`,
+          ...visits.slice(-6).map((visit) => `第${visit.visitNo}次 ${String(visit.date).slice(0, 10)} ${visit.doctorNote || pick(visit.parsed ?? {}, ['treatment_principle', 'treatmentPrinciple']) || ''}`),
+        ].join('\n');
+      } catch {
+        patientBlock = '';
+      }
+    }
+
+    const query = [question, patientBlock].filter(Boolean).join('\n');
+    const [external, internal] = await Promise.all([
+      scopes.external ? this.knowledge.searchExternal(query, 5) : Promise.resolve([]),
+      scopes.internal ? this.knowledge.searchInternal(query, 5) : Promise.resolve([]),
+    ]);
+    const citations = [
+      ...(scopes.patient && patientLabel ? [{ kind: 'patient', title: `患者记录 ${patientLabel}`, note: '当前患者已确认信息' }] : []),
+      ...internal.map((row) => ({ kind: 'internal', title: row.title, note: '已审核内部资料' })),
+      ...external.map((row) => ({ kind: 'external', title: row.title, note: '外部治疗参考资料' })),
+    ];
+    const risks = EMERGENCY_FLAGS.filter((flag) => query.includes(flag));
+    const fallback = {
+      mode: 'rule_based' as const,
+      conclusion: citations.length
+        ? '未配置或未调用模型，以下为资料库检索结果，请医生自行判断。'
+        : '当前范围没有可引用的本地资料。',
+      evidence: [
+        ...internal.slice(0, 3).map((row) => `内部：${row.title}`),
+        ...external.slice(0, 3).map((row) => `外部：${row.title}`),
+      ],
+      citations: citations.length ? citations : [{ kind: 'model', title: '模型通用知识', note: '无本地资料支持' }],
+      risks,
+      missing: citations.length ? [] : ['请勾选资料范围，或指定一位患者'],
+      disclaimer: DISCLAIMER,
+    };
+    if (!this.client.enabled) return fallback;
+
+    const modeHint = {
+      summary: '用简洁条目概括，不要展开处方。',
+      review: '做临床复盘：变化、方案调整、未改善项和下次追问，不直接给处方。',
+      advise: '给治疗参考，每条必须带来源；无来源须标明模型通用知识。',
+      teach: '用教学口吻，患者信息必须脱敏，不出现可识别身份。',
+    }[answerMode];
+
+    try {
+      const history = (input.history ?? []).slice(-8).map((item) => ({
+        role: item.role,
+        content: item.content.slice(0, 2000),
+      }));
+      const parsed = await this.client.chatJson<{
+        conclusion?: string;
+        evidence?: string[];
+        citations?: Array<{ kind?: string; title?: string; note?: string }>;
+        risks?: string[];
+        missing?: string[];
+      }>([
+        { role: 'system', content: CHAT_SYSTEM },
+        ...history,
+        {
+          role: 'user',
+          content: [
+            `【回答模式】${modeHint}`,
+            scopes.patient && patientBlock ? `【当前患者】\n${patientBlock}` : '【当前患者】未指定，不得编造患者。',
+            scopes.internal ? `【内部治疗资料库】\n${JSON.stringify(internal.map((row) => ({ id: row.id, title: row.title }))).slice(0, 6000)}` : '【内部治疗资料库】未纳入本次检索。',
+            scopes.external ? `【外部治疗参考资料库】\n${JSON.stringify(external.map((row) => ({ id: row.id, title: row.title }))).slice(0, 6000)}` : '【外部治疗参考资料库】未纳入本次检索。',
+            `【问题】\n${question}`,
+            '输出 JSON：{conclusion,evidence:[],citations:[{kind:internal|external|patient|model,title,note}],risks:[],missing:[]}',
+          ].join('\n\n'),
+        },
+      ], { temperature: 0.2, maxTokens: 2500 });
+      const nextCitations = (parsed.citations ?? [])
+        .map((item) => ({ kind: String(item.kind || 'model'), title: String(item.title || '').trim(), note: item.note ? String(item.note) : undefined }))
+        .filter((item) => item.title);
+      return {
+        mode: 'llm',
+        conclusion: String(parsed.conclusion || '').trim() || fallback.conclusion,
+        evidence: Array.isArray(parsed.evidence) ? parsed.evidence.map((item) => String(item)).filter(Boolean) : fallback.evidence,
+        citations: nextCitations.length ? nextCitations : fallback.citations,
+        risks: Array.isArray(parsed.risks) && parsed.risks.length ? parsed.risks.map((item) => String(item)) : risks,
+        missing: Array.isArray(parsed.missing) ? parsed.missing.map((item) => String(item)).filter(Boolean) : [],
+        disclaimer: DISCLAIMER,
+      };
+    } catch (error) {
+      this.logger.warn(`AI 对话失败，降级为检索草稿: ${String(error)}`);
+      return { ...fallback, mode: 'rule_based_fallback', missing: [`模型暂不可用：${String(error).slice(0, 80)}`] };
     }
   }
 

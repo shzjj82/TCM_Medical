@@ -1,4 +1,5 @@
-import type { AdviseResult, CaseRecord, Patient, SkillSummary, Visit } from '../types';
+import type { AdviseResult, CaseRecord, Patient, SessionUser, SkillSummary, Visit } from '../types';
+import { clearSession, readSession } from './session';
 
 export interface PatientFacets {
   diseases: string[];
@@ -24,22 +25,89 @@ export interface DuplicateGroup {
   patients: DuplicatePatient[];
 }
 
+export interface DashboardPatientRef {
+  id: string;
+  externalId?: string;
+  name: string;
+  gender?: string;
+  age?: number;
+}
+
+export interface DashboardVisitRow {
+  id: string;
+  visitNo: number;
+  date: string;
+  kind?: string | null;
+  reviewStatus: string;
+  patient: DashboardPatientRef | null;
+}
+
+export interface DashboardSummary {
+  today: { total: number; items: Patient[] };
+  pendingReturn: { total: number };
+  pendingFollowup: { total: number };
+  pendingAiReview: { total: number; items: DashboardVisitRow[] };
+  pendingKnowledge: { total: number };
+  recent: { total: number; items: Patient[] };
+}
+
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
+
+function authHeader(): Record<string, string> {
+  const token = readSession()?.token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function readError(res: Response): Promise<string> {
+  const detail = await res.text();
+  try {
+    const body = JSON.parse(detail) as { message?: string | string[] };
+    if (typeof body.message === 'string' && body.message) return body.message;
+    if (Array.isArray(body.message) && body.message.length) return body.message.join('；');
+  } catch {
+    /* 非 JSON 时退回原文 */
+  }
+  return detail.slice(0, 200) || `${res.status}`;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeader(),
+      ...(init?.headers ?? {}),
+    },
   });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`${res.status} ${detail.slice(0, 200)}`);
+  if (res.status === 401 && path !== '/auth/login') {
+    clearSession();
+    if (window.location.pathname !== '/login') {
+      const here = `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(null, '', '/login');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      try { sessionStorage.setItem('tcm-return', here.startsWith('/login') ? '/patients' : here); } catch { /* ignore */ }
+    }
   }
+  if (res.status === 403 && window.location.pathname !== '/403') {
+    window.history.replaceState(null, '', '/403');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+  if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as T;
 }
 
 export const api = {
   health: () => request<{ ok: boolean; ai: Record<string, unknown> }>('/health'),
+
+  login: (username: string, password: string) =>
+    request<{ token: string; user: SessionUser }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
+  me: () => request<SessionUser>('/auth/me'),
+
+  dashboard: () => request<DashboardSummary>('/dashboard'),
 
   listPatients: (params?: {
     keyword?: string;
@@ -115,6 +183,23 @@ export const api = {
 
   advise: (payload: { text?: string; patientId?: string; topK?: number }) =>
     request<AdviseResult>('/ai/advise', { method: 'POST', body: JSON.stringify(payload) }),
+
+  chat: (payload: {
+    message: string;
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    patientId?: string;
+    scopes?: { patient?: boolean; internal?: boolean; external?: boolean };
+    answerMode?: 'summary' | 'review' | 'advise' | 'teach';
+  }) =>
+    request<{
+      mode: 'llm' | 'rule_based' | 'rule_based_fallback';
+      conclusion: string;
+      evidence: string[];
+      citations: Array<{ kind: string; title: string; note?: string }>;
+      risks: string[];
+      missing: string[];
+      disclaimer: string;
+    }>('/ai/chat', { method: 'POST', body: JSON.stringify(payload) }),
 
   parseNote: (payload: { text?: string; doctorNote?: string }) =>
     request<Record<string, unknown>>('/ai/parse', { method: 'POST', body: JSON.stringify(payload) }),

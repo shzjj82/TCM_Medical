@@ -1,36 +1,15 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Sparkles } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Alert } from './ui/alert';
 import { Button } from './ui/button';
-import { DatePicker } from './ui/date-picker';
 import { FormSheet } from './ui/form-sheet';
-import { Label, Textarea } from './ui/input';
 import { splitList } from './CaseForm';
-import { ClinicalEntry, uploadTongue, type ClinicalTab, type ClinicalValue, type TongueDraft } from './ClinicalEntry';
+import { CLINICAL_TABS, ClinicalEntry, clinicalTabIssue, nextClinicalTab, uploadTongue, type ClinicalTab, type ClinicalValue, type TongueDraft } from './ClinicalEntry';
 import { api } from '../lib/api';
 import { pickField } from '../lib/coerce';
 import { kindOf } from '../lib/visit-kind';
 import type { CaseRecord, Visit } from '../types';
 
-const controlClass = 'rounded-lg border-slate-200 bg-white shadow-none focus-visible:border-[#175055] focus-visible:ring-0';
-
 type Focus = 'visit' | 'follow';
-
-interface CompareResult {
-  improved: string[];
-  worsened: string[];
-  added: string[];
-  resolved: string[];
-  unchanged: string[];
-}
-
-const COMPARE_LABELS: Array<[keyof CompareResult, string]> = [
-  ['improved', '好转'],
-  ['worsened', '加重'],
-  ['added', '新增'],
-  ['resolved', '消失'],
-  ['unchanged', '无明显变化'],
-];
 
 function clean(value?: string | null): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -117,17 +96,38 @@ export function FollowVisitForm({
   const [tab, setTab] = useState<ClinicalTab>(focus === 'follow' ? 'plan' : 'chart');
   const [clinical, setClinical] = useState<ClinicalValue>(() => emptyClinical(previous));
   const [tongueFile, setTongueFile] = useState<TongueDraft | null>(null);
-  const [adjustment, setAdjustment] = useState('');
-  const [summary, setSummary] = useState('');
-  const [followDate, setFollowDate] = useState('');
-  const [followNote, setFollowNote] = useState('');
-  const [compare, setCompare] = useState<CompareResult | null>(null);
-  const [comparing, setComparing] = useState(false);
-  const [summarizing, setSummarizing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const caseKey = caseRecord.externalId ?? caseRecord.id;
+  const nextTab = nextClinicalTab(tab);
+
+  function goTab(next: ClinicalTab) {
+    const forward = CLINICAL_TABS.indexOf(next) > CLINICAL_TABS.indexOf(tab);
+    if (forward) {
+      const issue = clinicalTabIssue(tab, clinical);
+      if (issue) {
+        setError(issue);
+        return;
+      }
+    }
+    setError(null);
+    setTab(next);
+  }
+
+  function goNext() {
+    const issue = clinicalTabIssue(tab, clinical);
+    if (issue) {
+      setError(issue);
+      return;
+    }
+    if (nextTab) {
+      setError(null);
+      setTab(nextTab);
+      return;
+    }
+    void submit(true);
+  }
 
   function currentText(): string {
     return [
@@ -136,49 +136,7 @@ export function FollowVisitForm({
       clinical.symptoms,
       clinical.tongue && `舌象 ${clinical.tongue}`,
       clinical.pulse && `脉象 ${clinical.pulse}`,
-      adjustment,
     ].map((item) => clean(item)).filter(Boolean).join('\n');
-  }
-
-  function previousText(): string {
-    return [
-      previous.chiefComplaint && `主诉 ${previous.chiefComplaint}`,
-      previous.presentIllness && `现病史 ${previous.presentIllness}`,
-      previous.syndrome && `证型 ${previous.syndrome}`,
-      previous.principle && `治则 ${previous.principle}`,
-      previous.planText,
-      previous.note,
-    ].filter(Boolean).join('\n');
-  }
-
-  async function runCompare() {
-    const current = currentText();
-    if (!current) {
-      setTab('condition');
-      setError('请先填写本次情况');
-      return;
-    }
-    setComparing(true);
-    setError(null);
-    try { setCompare(await api.compareVisit({ previous: previousText(), current })); }
-    catch (err) { setError(messageOf(err)); }
-    finally { setComparing(false); }
-  }
-
-  async function runSummary() {
-    const current = currentText();
-    if (!current) {
-      setTab('plan');
-      setError('请先填写本次情况');
-      return;
-    }
-    setSummarizing(true);
-    setError(null);
-    try {
-      const result = await api.summarizeVisit({ previous: previousText(), current });
-      setSummary(result.summary);
-    } catch (err) { setError(messageOf(err)); }
-    finally { setSummarizing(false); }
   }
 
   async function submit(confirm: boolean) {
@@ -197,11 +155,9 @@ export function FollowVisitForm({
       prescriptions: splitList(clinical.prescriptions),
       lifestyle: splitList(clinical.lifestyle),
     };
-    const doctorNote = [
-      clinical.tcmSyndrome.trim() && clinical.tcmSyndrome.trim() !== previous.syndrome ? `证型：${clinical.tcmSyndrome.trim()}` : '',
-      adjustment.trim(),
-    ].filter(Boolean).join('\n');
-    const nextPlan = [followDate, followNote.trim()].filter(Boolean).join(' ');
+    const doctorNote = clinical.tcmSyndrome.trim() && clinical.tcmSyndrome.trim() !== previous.syndrome
+      ? `证型：${clinical.tcmSyndrome.trim()}`
+      : '';
     setSaving(true);
     try {
       const uploaded = await uploadTongue(tongueFile);
@@ -220,16 +176,13 @@ export function FollowVisitForm({
           acupoints: diagnosis.acupoints,
           prescriptions: diagnosis.prescriptions,
           lifestyle: diagnosis.lifestyle,
-          narrative: summary.trim() || undefined,
         },
         media: uploaded ? [{ kind: 'tongue', name: uploaded.name, url: uploaded.url }] : [],
         channels: uploaded ? ['image'] : [],
-        nextPlan: nextPlan || undefined,
         aiMode: 'manual',
         kind: 'return',
         reviewStatus: confirm ? 'confirmed' : 'pending',
-        summary: confirm ? summary.trim() || undefined : undefined,
-        keepSummary: !(confirm && summary.trim()),
+        keepSummary: true,
       });
       if (tongueFile) URL.revokeObjectURL(tongueFile.preview);
       await onSaved?.();
@@ -237,9 +190,6 @@ export function FollowVisitForm({
     finally { setSaving(false); }
   }
 
-  const compareRows = COMPARE_LABELS
-    .map(([key, label]) => [label, (compare?.[key] ?? []).join('、')] as [string, string])
-    .filter(([, value]) => value);
   const returnCount = visits.filter((item) => kindOf(item) === 'return').length;
   const visitNo = returnCount + 1;
 
@@ -253,75 +203,21 @@ export function FollowVisitForm({
           {error ? <Alert tone="danger">{error}</Alert> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" className="border-slate-200" onClick={onClose} disabled={saving}>取消</Button>
-            <Button type="button" onClick={() => void submit(true)} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
+            <Button type="button" onClick={goNext} disabled={saving}>{saving ? '保存中…' : nextTab ? '下一步' : '保存'}</Button>
           </div>
         </div>
       )}
     >
       <ClinicalEntry
         tab={tab}
-        onTab={setTab}
+        onTab={goTab}
         value={clinical}
         onChange={(key, next) => setClinical((prev) => ({ ...prev, [key]: next }))}
         tongue={tongueFile}
         onTongue={setTongueFile}
         aiAllowed={aiAllowed}
         saving={saving}
-        conditionExtra={(
-          <div className="space-y-3 border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">只列出本次材料里写明的变化。</p>
-              <Button type="button" size="sm" variant="outline" className="border-slate-200" onClick={() => void runCompare()} disabled={!aiAllowed || comparing || saving}>
-                <Sparkles className="h-3.5 w-3.5" />
-                {comparing ? '对比中…' : '与上次对比'}
-              </Button>
-            </div>
-            {!aiAllowed ? <p className="text-xs text-slate-400">患者未授权 AI，不能自动对比。</p> : null}
-            {compare ? (
-              compareRows.length ? (
-                <div className="space-y-1 text-sm leading-6 text-slate-700">
-                  {compareRows.map(([label, value]) => <p key={label}>{label}：{value}</p>)}
-                </div>
-              ) : <p className="text-sm text-slate-400">本次材料里没有写明变化。</p>
-            ) : null}
-          </div>
-        )}
-        planExtra={(
-          <div className="space-y-4 border-t border-slate-100 pt-4">
-            <Field label="调整说明">
-              <Textarea className={`${controlClass} min-h-[84px] resize-y`} rows={3} value={adjustment} onChange={(event) => setAdjustment(event.target.value)} placeholder="本次方案相对上次做了什么调整" />
-            </Field>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-slate-500">摘要写入末期情况，确认后可再改字。</p>
-              <Button type="button" size="sm" variant="outline" className="border-slate-200" onClick={() => void runSummary()} disabled={!aiAllowed || summarizing || saving}>
-                <Sparkles className="h-3.5 w-3.5" />
-                {summarizing ? '生成中…' : '生成摘要'}
-              </Button>
-            </div>
-            {!aiAllowed ? <p className="text-xs text-slate-400">患者未授权 AI，请手工填写摘要。</p> : null}
-            <Field label="最新摘要">
-              <Textarea className={`${controlClass} min-h-[96px] resize-y`} rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="确认本次后，这段文字显示在末期卡片" />
-            </Field>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="下次随访">
-                <DatePicker future value={followDate} onChange={setFollowDate} placeholder="选择随访日期" />
-              </Field>
-            </div>
-            <Field label="随访内容">
-              <Textarea className={`${controlClass} min-h-[72px] resize-y`} rows={2} value={followNote} onChange={(event) => setFollowNote(event.target.value)} placeholder="下次复诊要观察什么" />
-            </Field>
-          </div>
-        )}
       />
     </FormSheet>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <Label>{label}</Label>
-      {children}
-    </div>
   );
 }

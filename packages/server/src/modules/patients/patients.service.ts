@@ -20,7 +20,7 @@ export interface ListPatientsParams {
   course?: string;
   tag?: string;
   doctor?: string;
-  /** d7 | d30 | d90 | over30 | over90 */
+  /** today | d7 | d30 | d90 | over30 | over90 */
   visit?: string;
   /** recent | followup | overdue | treating | closed */
   view?: string;

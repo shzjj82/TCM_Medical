@@ -6,14 +6,12 @@ import type { Visit } from '../../types';
 export function CourseTimeline({
   visitTotal,
   visits,
-  onOpen,
   card = false,
   hideTitle = false,
   embedded = false,
 }: {
   visitTotal: number;
   visits: Visit[];
-  onOpen: () => void;
   card?: boolean;
   hideTitle?: boolean;
   embedded?: boolean;
@@ -26,16 +24,19 @@ export function CourseTimeline({
       {visits.length > 0 ? (
         <Scrollbar className={`min-h-0 flex-1 ${showHeading ? 'mt-3' : ''}`}>
           <ol className="relative space-y-5 pl-6">
-            <span className="absolute bottom-2 left-[7px] top-2 w-px bg-[#d7ebe7]" />
-            {visits.map((item) => {
+            {visits.map((item, index) => {
               const icons = channelIcons(item.channels ?? []);
               const plan = planOf(item);
+              const last = index === visits.length - 1;
               return (
                 <li key={item.id} className="relative">
+                  {!last ? (
+                    <span aria-hidden className="absolute -left-[17px] top-4 -bottom-5 w-px bg-[#d7ebe7]" />
+                  ) : null}
                   <span className="absolute -left-6 top-1 grid h-3.5 w-3.5 place-items-center rounded-full border-2 border-[#1a8f78] bg-white">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#1a8f78]" />
                   </span>
-                  <button type="button" onClick={onOpen} className="block w-full text-left">
+                  <div>
                     <p className="text-sm text-slate-800">
                       <span className="font-medium">{visitLabel(item, visits)}</span>
                       <span className="ml-2 text-slate-400">{day(item.date)}</span>
@@ -46,7 +47,7 @@ export function CourseTimeline({
                         {icons.map((Icon, i) => <Icon key={i} className="h-4 w-4" strokeWidth={1.75} />)}
                       </span>
                     ) : null}
-                  </button>
+                  </div>
                 </li>
               );
             })}

@@ -13,7 +13,6 @@ export function CourseOverview({
   latestLines,
   visitTotal,
   visits,
-  onOpen,
 }: {
   initialDate: string;
   latestDate: string;
@@ -21,7 +20,6 @@ export function CourseOverview({
   latestLines: Array<[string, string]>;
   visitTotal: number;
   visits: Visit[];
-  onOpen: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [slide, setSlide] = useState(0);
@@ -51,9 +49,17 @@ export function CourseOverview({
       <div className={`hidden transition-[grid-template-rows] duration-300 ease-out lg:grid ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className={`min-h-0 overflow-hidden transition-opacity duration-300 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
           <div className="grid items-stretch gap-4 pt-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,0.9fr)]">
-            {hasInitial ? <CourseStageCard title="期初症状" date={initialDate} lines={initialLines} /> : <div />}
-            <CourseTimeline visitTotal={visitTotal} visits={visits} onOpen={onOpen} />
-            {hasLatest ? <CourseStageCard title="末期症状" date={latestDate} lines={latestLines} /> : <div />}
+            {hasInitial ? <CourseStageCard title="期初症状" date={initialDate} lines={initialLines} /> : (
+              <StageEmpty title="期初症状" text="暂无期初症状" />
+            )}
+            {visits.length > 0 ? (
+              <CourseTimeline visitTotal={visitTotal} visits={visits} />
+            ) : (
+              <StageEmpty heading="经过 0 次治疗" text="暂无治疗记录" />
+            )}
+            {hasLatest ? <CourseStageCard title="末期症状" date={latestDate} lines={latestLines} /> : (
+              <StageEmpty title="末期症状" text="暂无末期症状" />
+            )}
           </div>
         </div>
       </div>
@@ -74,7 +80,6 @@ export function CourseOverview({
                     key="course"
                     visitTotal={visitTotal}
                     visits={visits}
-                    onOpen={onOpen}
                     card
                     hideTitle
                     embedded
@@ -86,6 +91,16 @@ export function CourseOverview({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StageEmpty({ title, heading, text }: { title?: string; heading?: string; text: string }) {
+  return (
+    <div className="flex flex-col rounded-2xl bg-[#f4fbf9] px-4 pb-4 pt-4 lg:h-72">
+      {title ? <CourseStageTitle title={title} className="shrink-0" /> : null}
+      {heading ? <p className="shrink-0 text-center text-lg font-medium text-[#1a8f78]">{heading}</p> : null}
+      <p className="flex flex-1 items-center justify-center text-sm text-slate-400">{text}</p>
     </div>
   );
 }

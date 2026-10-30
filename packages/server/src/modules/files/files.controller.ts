@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Res } from '@n
 import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import type { Response } from 'express';
+import { Public } from '../auth/public';
 
 const DIR = join(process.cwd(), 'uploads', 'tongues');
 
@@ -24,6 +25,7 @@ export class FilesController {
     return { url: `/api/files/tongues/${id}`, name };
   }
 
+  @Public()
   @Get('tongues/:name')
   read(@Param('name') name: string, @Res() res: Response) {
     const safe = basename(name);

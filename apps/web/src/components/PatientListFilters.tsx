@@ -19,6 +19,7 @@ const VIEWS: Array<{ id: string; label: string }> = [
 
 const COURSES = ['治疗中', '已结案', '暂停', '待建档'];
 const VISITS: Array<{ id: string; label: string }> = [
+  { id: 'today', label: '今天' },
   { id: 'd7', label: '近 7 天' },
   { id: 'd30', label: '近 30 天' },
   { id: 'd90', label: '近 90 天' },
