@@ -183,9 +183,9 @@ export function KnowledgePage(_props: Props) {
       <div className="flex shrink-0 items-end border-b border-slate-100">
         <div ref={barRef} className="relative flex min-w-0 flex-1 gap-6">
           {LIBRARIES.map((item) => (
-            <button
+                <button
               key={item.id}
-              type="button"
+                  type="button"
               data-tab={item.id}
               onClick={() => setLibrary(item.id)}
               className={`shrink-0 pb-2 text-sm transition-colors duration-200 ${
@@ -193,7 +193,7 @@ export function KnowledgePage(_props: Props) {
               }`}
             >
               {item.label}
-            </button>
+                </button>
           ))}
           {indicator}
         </div>
@@ -277,15 +277,15 @@ export function KnowledgePage(_props: Props) {
                 下一页
               </Button>
             </div>
-          </div>
-        </div>
+                    </div>
+                  </div>
       ) : null}
 
       {detail ? <KnowledgeDetail detail={detail} onClose={() => setDetail(null)} /> : null}
       {showCreate ? (
-        <ReferenceForm
+          <ReferenceForm
           onClose={() => setShowCreate(false)}
-          onSaved={() => {
+            onSaved={() => {
             setShowCreate(false);
             setLibrary('external');
             void load(q);
@@ -407,9 +407,9 @@ function CaseDetail({ row }: { row: CaseRecord }) {
   const plan = row.treatmentPlan ?? {};
   const contrast = (row.contrast ?? {}) as Record<string, unknown>;
   const delta = (contrast.delta ?? {}) as Record<string, unknown>;
-  const verdict = pickField<string>(delta, 'verdict', 'verdict');
-  const rate = pickNumber(delta, 'improvement_rate', 'improvementRate');
-  return (
+              const verdict = pickField<string>(delta, 'verdict', 'verdict');
+              const rate = pickNumber(delta, 'improvement_rate', 'improvementRate');
+              return (
     <div className="space-y-4">
       <Pair label="适用病症" value={text(row.tcmDisease)} />
       <Pair label="适用证型" value={text(row.tcmSyndrome)} />
@@ -423,7 +423,7 @@ function CaseDetail({ row }: { row: CaseRecord }) {
       <p className="rounded-xl bg-[#f4fbf9] px-3 py-2 text-xs leading-5 text-slate-500">
         来源：本院脱敏医案，治疗 {row.visitCount ?? 0} 次。已隐藏姓名、联系方式等身份信息，仅供内部检索与教学参考。
       </p>
-    </div>
+                    </div>
   );
 }
 
@@ -558,20 +558,20 @@ function ReferenceForm({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         <Field label="原文内容" required>
           <Textarea className={`${controlClass} min-h-[120px] resize-y`} value={form.content} onChange={(event) => update('content', event.target.value)} placeholder="原文摘录、加减要点、禁忌与注意事项" />
         </Field>
-      </div>
+          </div>
     </FormSheet>
   );
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
+        <div className="space-y-1">
       <Label className="flex items-center gap-1">
         {label}
         {required ? <span className="text-destructive">*</span> : null}
       </Label>
       {children}
-    </div>
+        </div>
   );
 }
 
@@ -591,7 +591,7 @@ function Pills({ items }: { items: string[] }) {
       {items.map((item) => (
         <span key={item} className="rounded-full bg-[#f3f6f7] px-2 py-0.5 text-xs text-slate-600">{item}</span>
       ))}
-    </div>
+        </div>
   );
 }
 
