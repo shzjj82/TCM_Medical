@@ -70,7 +70,7 @@ export function VoiceIntake({
 }: {
   disabled?: boolean;
   blockedReason?: string;
-  onDraft: (draft: IntakeDraft, transcript: string) => void;
+  onDraft: (draft: IntakeDraft, transcript: string, file?: File) => void;
   /** record 只录音，upload 只上传音频，both 两个都有。 */
   mode?: 'record' | 'upload' | 'both';
   /** center 与文件解析一样，只把按钮放在中间。 */
@@ -92,7 +92,7 @@ export function VoiceIntake({
       const audioBase64 = await readFile(file);
       const result = await api.transcribeIntake({ audioBase64, mime: file.type || 'audio/webm' });
       setTranscript(result.transcript);
-      onDraft(draftFromFields(result.fields), result.transcript);
+      onDraft(draftFromFields(result.fields), result.transcript, file);
     } catch (err) {
       setError(String(err).replace(/^\d+\s*/, '').replace(/^Error:\s*/, ''));
     } finally {

@@ -1,6 +1,7 @@
-import { channelIcons, day, planOf } from '../../lib/visit-display';
+import { day, planOf, visitAssistMedia } from '../../lib/visit-display';
 import { visitLabel } from '../../lib/visit-kind';
 import { Scrollbar } from '../ui/scrollbar';
+import { VisitAssistFile } from '../VisitAssistFile';
 import type { Visit } from '../../types';
 
 export function CourseTimeline({
@@ -25,8 +26,8 @@ export function CourseTimeline({
         <Scrollbar className={`min-h-0 flex-1 ${showHeading ? 'mt-3' : ''}`}>
           <ol className="relative space-y-5 pl-6">
             {visits.map((item, index) => {
-              const icons = channelIcons(item.channels ?? []);
               const plan = planOf(item);
+              const files = visitAssistMedia(item);
               const last = index === visits.length - 1;
               return (
                 <li key={item.id} className="relative">
@@ -42,10 +43,10 @@ export function CourseTimeline({
                       <span className="ml-2 text-slate-400">{day(item.date)}</span>
                     </p>
                     {plan && plan !== '—' ? <p className="mt-1 text-sm leading-6 text-slate-600">{plan}</p> : null}
-                    {icons.length > 0 ? (
-                      <span className="mt-1.5 flex gap-2 text-[#1a8f78]">
-                        {icons.map((Icon, i) => <Icon key={i} className="h-4 w-4" strokeWidth={1.75} />)}
-                      </span>
+                    {files.length ? (
+                      <div className="mt-1.5 flex flex-col items-start gap-1.5">
+                        {files.map((file) => <VisitAssistFile key={file.url} file={file} />)}
+                      </div>
                     ) : null}
                   </div>
                 </li>

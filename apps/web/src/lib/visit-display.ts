@@ -74,3 +74,70 @@ export function present(lines: Array<[string, string]>): Array<[string, string]>
     return Boolean(raw) && raw !== '—' && raw !== '-';
   });
 }
+
+export interface VisitMedia {
+  kind: string;
+  name: string;
+  url: string;
+  source?: string;
+}
+
+function fileNameOf(url: string): string {
+  try {
+    const path = new URL(url, 'http://local').pathname;
+    return decodeURIComponent(path.split('/').filter(Boolean).pop() ?? '') || '附件';
+  } catch {
+    return '附件';
+  }
+}
+
+function inferKind(url: string, name = ''): string {
+  const hay = `${url} ${name}`.toLowerCase();
+  if (/舌|tongue|\.(png|jpe?g|gif|webp|bmp|heic|svg)(\?|$)/i.test(hay)) return 'image';
+  if (/语音|audio|voice|\.(mp3|wav|m4a|aac|ogg|webm)(\?|$)/i.test(hay)) return 'audio';
+  return 'file';
+}
+
+export function visitMedia(visit?: Visit): VisitMedia[] {
+  const list = visit?.raw?.media;
+  if (!Array.isArray(list)) return [];
+  const files: VisitMedia[] = [];
+  for (const item of list) {
+    if (typeof item === 'string') {
+      const url = item.trim();
+      if (url) files.push({ kind: inferKind(url), name: fileNameOf(url), url });
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const url = String(rec.url ?? rec.href ?? rec.path ?? '').trim();
+    if (!url) continue;
+    const name = String(rec.name ?? rec.filename ?? fileNameOf(url)).trim() || '附件';
+    files.push({
+      kind: String(rec.kind ?? rec.type ?? '').trim() || inferKind(url, name),
+      name,
+      url,
+      source: String(rec.source ?? '').trim() || undefined,
+    });
+  }
+  return files;
+}
+
+export function isImageMedia(file: VisitMedia): boolean {
+  if (file.kind === 'assist') return false;
+  if (/image|photo|picture|ocr|舌|tongue/i.test(`${file.kind} ${file.name}`)) return true;
+  return /\.(png|jpe?g|gif|webp|bmp|heic|svg)(\?|$)/i.test(file.url);
+}
+
+export function isAudioMedia(file: VisitMedia): boolean {
+  if (/audio|voice|speech|语音/i.test(`${file.kind} ${file.source ?? ''} ${file.name}`)) return true;
+  return /\.(mp3|wav|m4a|aac|ogg|webm)(\?|$)/i.test(file.url);
+}
+
+export function visitImages(visit?: Visit): VisitMedia[] {
+  return visitMedia(visit).filter(isImageMedia);
+}
+
+export function visitAssistMedia(visit?: Visit): VisitMedia[] {
+  return visitMedia(visit).filter((file) => file.kind === 'assist');
+}

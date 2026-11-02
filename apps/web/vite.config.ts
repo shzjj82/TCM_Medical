@@ -22,13 +22,9 @@ export default defineConfig({
       '/api': {
         target: API,
         changeOrigin: true,
+        timeout: 120000,
+        proxyTimeout: 120000,
         rewrite: (path) => path.replace(/^\/api/, '/medical'),
-        configure: attachBizCode,
-      },
-      '/health': {
-        target: API,
-        changeOrigin: true,
-        rewrite: () => '/medical/health',
         configure: attachBizCode,
       },
     },

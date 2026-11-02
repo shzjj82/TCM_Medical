@@ -52,34 +52,33 @@ export interface DashboardSummary {
 }
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
+const BIZ_CODE = (import.meta.env.VITE_BIZ_CODE as string | undefined) ?? 'medical';
 
 function authHeader(): Record<string, string> {
   const token = readSession()?.token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function readError(res: Response): Promise<string> {
-  const detail = await res.text();
-  try {
-    const body = JSON.parse(detail) as { message?: string | string[] };
-    if (typeof body.message === 'string' && body.message) return body.message;
-    if (Array.isArray(body.message) && body.message.length) return body.message.join('；');
-  } catch {
-    /* 非 JSON 时退回原文 */
-  }
-  return detail.slice(0, 200) || `${res.status}`;
+function isEnvelope(value: unknown): value is { success: boolean; message?: string | string[]; data?: unknown } {
+  return Boolean(value && typeof value === 'object' && 'success' in value && 'data' in value);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeader(),
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (res.status === 401 && path !== '/auth/login') {
+function envelopeMessage(value: { message?: string | string[] }): string | undefined {
+  if (typeof value.message === 'string' && value.message) return value.message;
+  if (Array.isArray(value.message) && value.message.length) return value.message.map(String).join('；');
+  return undefined;
+}
+
+function errorText(raw: unknown, fallback: string): string {
+  if (isEnvelope(raw)) return envelopeMessage(raw) || fallback;
+  if (raw && typeof raw === 'object' && 'message' in raw) {
+    return envelopeMessage(raw as { message?: string | string[] }) || fallback;
+  }
+  return fallback;
+}
+
+function kickAuth(status: number, path: string) {
+  if (status === 401 && path !== '/auth/login') {
     clearSession();
     if (window.location.pathname !== '/login') {
       const here = `${window.location.pathname}${window.location.search}`;
@@ -88,17 +87,111 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       try { sessionStorage.setItem('tcm-return', here.startsWith('/login') ? '/patients' : here); } catch { /* ignore */ }
     }
   }
-  if (res.status === 403 && window.location.pathname !== '/403') {
+  if (status === 403 && window.location.pathname !== '/403') {
     window.history.replaceState(null, '', '/403');
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
-  if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as T;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isForm = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+      'X-Biz-Code': BIZ_CODE,
+      ...authHeader(),
+      ...(init?.headers ?? {}),
+    },
+  });
+  kickAuth(res.status, path);
+  const raw: unknown = await res.json().catch(() => null);
+  if (!res.ok || (isEnvelope(raw) && raw.success === false)) {
+    throw new Error(errorText(raw, `${res.status}`));
+  }
+  return (isEnvelope(raw) ? raw.data : raw) as T;
+}
+
+export interface ChatReply {
+  mode: 'llm' | 'rule_based' | 'rule_based_fallback';
+  conclusion: string;
+  evidence: string[];
+  citations: Array<{ kind: string; title: string; note?: string }>;
+  risks: string[];
+  missing: string[];
+  disclaimer: string;
+}
+
+type ChatPayload = {
+  message: string;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  patientId?: string;
+  scopes?: { patient?: boolean; internal?: boolean; external?: boolean };
+  answerMode?: 'summary' | 'review' | 'advise' | 'teach';
+};
+
+async function chatStream(
+  payload: ChatPayload,
+  onEvent: (event: { delta?: string; reply?: ChatReply }) => void,
+): Promise<ChatReply> {
+  const res = await fetch(`${BASE}/ai/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      'X-Biz-Code': BIZ_CODE,
+      ...authHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+  kickAuth(res.status, '/ai/chat');
+  const type = res.headers.get('content-type') ?? '';
+  if (!res.ok) {
+    const raw: unknown = await res.json().catch(() => null);
+    throw new Error(errorText(raw, `${res.status}`));
+  }
+  if (!type.includes('text/event-stream')) {
+    const raw: unknown = await res.json().catch(() => null);
+    const data = (isEnvelope(raw) ? raw.data : raw) as ChatReply;
+    if (!data?.conclusion && isEnvelope(raw) && raw.success === false) {
+      throw new Error(errorText(raw, `${res.status}`));
+    }
+    onEvent({ reply: data });
+    return data;
+  }
+  if (!res.body) throw new Error('对话没有返回结果');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let final: ChatReply | undefined;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split(/\n\n/);
+    buffer = blocks.pop() ?? '';
+    for (const block of blocks) {
+      for (const line of block.split(/\n/)) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === '[DONE]') continue;
+        let parsed: { delta?: string; reply?: ChatReply; error?: string };
+        try { parsed = JSON.parse(data) as { delta?: string; reply?: ChatReply; error?: string }; }
+        catch { continue; }
+        if (parsed.error) throw new Error(parsed.error);
+        if (parsed.delta) onEvent({ delta: parsed.delta });
+        if (parsed.reply) {
+          final = parsed.reply;
+          onEvent({ reply: parsed.reply });
+        }
+      }
+    }
+  }
+  if (!final) throw new Error('对话没有返回结果');
+  return final;
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; ai: Record<string, unknown> }>('/health'),
-
   login: (username: string, password: string) =>
     request<{ token: string; user: SessionUser }>('/auth/login', {
       method: 'POST',
@@ -184,22 +277,7 @@ export const api = {
   advise: (payload: { text?: string; patientId?: string; topK?: number }) =>
     request<AdviseResult>('/ai/advise', { method: 'POST', body: JSON.stringify(payload) }),
 
-  chat: (payload: {
-    message: string;
-    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
-    patientId?: string;
-    scopes?: { patient?: boolean; internal?: boolean; external?: boolean };
-    answerMode?: 'summary' | 'review' | 'advise' | 'teach';
-  }) =>
-    request<{
-      mode: 'llm' | 'rule_based' | 'rule_based_fallback';
-      conclusion: string;
-      evidence: string[];
-      citations: Array<{ kind: string; title: string; note?: string }>;
-      risks: string[];
-      missing: string[];
-      disclaimer: string;
-    }>('/ai/chat', { method: 'POST', body: JSON.stringify(payload) }),
+  chatStream,
 
   parseNote: (payload: { text?: string; doctorNote?: string }) =>
     request<Record<string, unknown>>('/ai/parse', { method: 'POST', body: JSON.stringify(payload) }),
@@ -219,8 +297,19 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  uploadTongue: (payload: { imageBase64: string; mime: string; name: string }) =>
-    request<{ url: string; name: string }>('/files/tongue', { method: 'POST', body: JSON.stringify(payload) }),
+  uploadTongue: (file: File, name?: string) => {
+    const body = new FormData();
+    body.append('file', file);
+    if (name) body.append('name', name);
+    return request<{ url: string; name: string }>('/files/tongue', { method: 'POST', body });
+  },
+
+  uploadAssist: (file: File, name?: string) => {
+    const body = new FormData();
+    body.append('file', file);
+    if (name) body.append('name', name);
+    return request<{ url: string; name: string }>('/files/assist', { method: 'POST', body });
+  },
 
   /** 上传录音，返回转写和拆好的主诉字段。不直接建档。 */
   transcribeIntake: (payload: { audioBase64: string; mime: string }) =>

@@ -51,6 +51,12 @@ export interface TongueDraft {
   preview: string;
 }
 
+export interface AssistDraft {
+  name: string;
+  file: File;
+  kind: AssistMode;
+}
+
 const FIELD_LABEL: Record<string, string> = {
   chiefComplaint: '主诉',
   presentIllness: '现病史',
@@ -82,23 +88,39 @@ function messageOf(error: unknown): string {
   return String(error).replace(/^\d+\s*/, '').replace(/^Error:\s*/, '');
 }
 
-function readFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? '');
-      const comma = result.indexOf(',');
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(new Error('无法读取文件'));
-    reader.readAsDataURL(file);
-  });
-}
-
 export async function uploadTongue(draft: TongueDraft | null): Promise<{ url: string; name: string } | null> {
   if (!draft) return null;
-  const imageBase64 = await readFile(draft.file);
-  return api.uploadTongue({ imageBase64, mime: draft.file.type || 'image/jpeg', name: draft.name });
+  return api.uploadTongue(draft.file, draft.name);
+}
+
+export async function uploadAssist(files: AssistDraft[]): Promise<Array<{ name: string; url: string; source: AssistMode }>> {
+  const uploaded: Array<{ name: string; url: string; source: AssistMode }> = [];
+  for (const item of files) {
+    const stored = await api.uploadAssist(item.file, item.name);
+    uploaded.push({ name: stored.name, url: stored.url, source: item.kind });
+  }
+  return uploaded;
+}
+
+export function visitMediaPayload(
+  tongue: { name: string; url: string } | null,
+  assist: Array<{ name: string; url: string; source: string }>,
+) {
+  const media = [
+    ...(tongue ? [{ kind: 'tongue', name: tongue.name, url: tongue.url }] : []),
+    ...assist.map((item) => ({ kind: 'assist', source: item.source, name: item.name, url: item.url })),
+  ];
+  const channels = new Set<string>();
+  if (tongue) channels.add('image');
+  for (const item of assist) {
+    if (item.source === 'voice' || item.source === 'audio') channels.add('audio');
+    else channels.add('text');
+  }
+  return {
+    media,
+    channels: [...channels],
+    aiMode: assist.length ? 'llm' as const : 'manual' as const,
+  };
 }
 
 /** 病例诊断、目前情况、诊断方案。每页都可以用语音、文件或对话填入。 */
@@ -109,6 +131,8 @@ export function ClinicalEntry({
   onChange,
   tongue,
   onTongue,
+  assistFiles,
+  onAssistFiles,
   aiAllowed,
   saving,
   conditionExtra,
@@ -120,6 +144,8 @@ export function ClinicalEntry({
   onChange: (key: keyof ClinicalValue, next: string) => void;
   tongue: TongueDraft | null;
   onTongue: (next: TongueDraft | null) => void;
+  assistFiles: AssistDraft[];
+  onAssistFiles: (next: AssistDraft[]) => void;
   aiAllowed: boolean;
   saving?: boolean;
   conditionExtra?: ReactNode;
@@ -209,6 +235,9 @@ export function ClinicalEntry({
           onClose={() => setAssist(false)}
           onApply={applyFields}
           onTongue={onTongue}
+          onAssistFile={(item) => {
+            onAssistFiles([...assistFiles.filter((file) => file.name !== item.name || file.kind !== item.kind), item]);
+          }}
         />
       ) : null}
     </>
@@ -300,12 +329,14 @@ function AssistDialog({
   onClose,
   onApply,
   onTongue,
+  onAssistFile,
 }: {
   tab: ClinicalTab;
   aiAllowed: boolean;
   onClose: () => void;
   onApply: (fields: Record<string, string>) => void;
   onTongue: (next: TongueDraft | null) => void;
+  onAssistFile: (item: AssistDraft) => void;
 }) {
   const [mode, setMode] = useState<AssistMode>('voice');
   const [busy, setBusy] = useState(false);
@@ -365,6 +396,7 @@ function AssistDialog({
         return;
       }
       await extract(text);
+      onAssistFile({ name: file.name, file, kind: 'file' });
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -392,7 +424,10 @@ function AssistDialog({
                   layout="center"
                   disabled={!aiAllowed || busy}
                   blockedReason={blocked}
-                  onDraft={(_draft, transcript) => { if (transcript.trim()) void fromTranscript(transcript); }}
+                  onDraft={(_draft, transcript, file) => {
+                    if (file && transcript.trim()) onAssistFile({ name: file.name, file, kind: 'voice' });
+                    if (transcript.trim()) void fromTranscript(transcript);
+                  }}
                 />
               ) : null}
               {item.id === 'file' ? (
@@ -420,7 +455,10 @@ function AssistDialog({
                   layout="center"
                   disabled={!aiAllowed || busy}
                   blockedReason={blocked}
-                  onDraft={(_draft, transcript) => { if (transcript.trim()) void fromTranscript(transcript); }}
+                  onDraft={(_draft, transcript, file) => {
+                    if (file && transcript.trim()) onAssistFile({ name: file.name, file, kind: 'audio' });
+                    if (transcript.trim()) void fromTranscript(transcript);
+                  }}
                 />
               ) : null}
               {error ? <Alert tone="danger">{error}</Alert> : null}

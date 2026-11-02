@@ -10,7 +10,7 @@ import { ChatReplySkeleton } from '../components/ui/skeleton';
 import { Input, Textarea } from '../components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '../components/ui/popover';
 import { Scrollbar } from '../components/ui/scrollbar';
-import { api } from '../lib/api';
+import { api, type ChatReply } from '../lib/api';
 import { readThreads, removeThread, titleFrom, upsertThread, type ChatThread } from '../lib/chat-history';
 import type { Patient } from '../types';
 
@@ -27,16 +27,6 @@ interface Scopes {
   patient: boolean;
   internal: boolean;
   external: boolean;
-}
-
-interface ChatReply {
-  mode: 'llm' | 'rule_based' | 'rule_based_fallback';
-  conclusion: string;
-  evidence: string[];
-  citations: Array<{ kind: string; title: string; note?: string }>;
-  risks: string[];
-  missing: string[];
-  disclaimer: string;
 }
 
 interface Message {
@@ -149,18 +139,38 @@ export function ChatPage() {
     const started = [...messages, userMsg];
     setDraft('');
     setError(null);
-    setMessages(started);
+    const assistantId = crypto.randomUUID();
+    const blank: ChatReply = {
+      mode: 'llm',
+      conclusion: '',
+      evidence: [],
+      citations: [],
+      risks: [],
+      missing: [],
+      disclaimer: '',
+    };
+    setMessages([...started, { id: assistantId, role: 'assistant', text: '', reply: blank }]);
     setBusy(true);
     try {
-      const reply = await api.chat({
+      const reply = await api.chatStream({
         message: text,
         history,
         patientId: scopes.patient ? (patient?.externalId ?? patient?.id) : undefined,
         scopes,
         answerMode,
+      }, (event) => {
+        setMessages((current) => current.map((item) => {
+          if (item.id !== assistantId) return item;
+          if (event.reply) return { ...item, text: event.reply.conclusion, reply: event.reply };
+          if (event.delta) {
+            const conclusion = `${item.reply?.conclusion ?? ''}${event.delta}`;
+            return { ...item, text: conclusion, reply: { ...(item.reply ?? blank), conclusion } };
+          }
+          return item;
+        }));
       });
       const next = [...started, {
-        id: crypto.randomUUID(),
+        id: assistantId,
         role: 'assistant' as const,
         text: reply.conclusion,
         reply,
@@ -336,7 +346,7 @@ export function ChatPage() {
               </div>
             )
           ))}
-          {busy ? <ChatReplySkeleton /> : null}
+          {busy && messages.at(-1)?.role !== 'assistant' ? <ChatReplySkeleton /> : null}
           <div ref={bottomRef} />
         </Scrollbar>
 

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Menu } from 'lucide-react';
-import { Alert } from './components/ui/alert';
 import { Scrollbar } from './components/ui/scrollbar';
 import { PatientListSkeleton, Skeleton } from './components/ui/skeleton';
 import { ClinicSidebar, type PageKey } from './components/ClinicSidebar';
@@ -23,7 +22,6 @@ export default function App() {
   const { route, navigate } = useAppRoute();
   const [user, setUser] = useState<SessionUser | null>(() => readSession()?.user ?? null);
   const [checking, setChecking] = useState(() => Boolean(readSession()));
-  const [healthError, setHealthError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const page: PageKey = route.name === 'dashboard' ? 'dashboard' : route.name === 'knowledge' ? 'knowledge' : route.name === 'chat' ? 'chat' : route.name === 'advise' ? 'advise' : route.name === 'skills' ? 'skills' : route.name === 'notfound' || route.name === 'forbidden' ? 'skills' : 'patients';
   const patientKey = route.name === 'patient' || route.name === 'case' ? route.patientKey : null;
@@ -62,11 +60,6 @@ export default function App() {
       navigate('/login', true);
     }
   }, [checking, user, route.name, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
-    api.health().catch((err) => setHealthError(String(err)));
-  }, [user]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -172,12 +165,6 @@ export default function App() {
           className="min-h-0 flex-1"
           viewportClassName="flex flex-col overscroll-contain pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-6"
         >
-          {healthError ? (
-            <Alert tone="warn" title="服务端暂未连通">
-              当前只能看到界面。请确认 PostgreSQL 已启动，并在项目根目录执行 pnpm dev。{healthError}
-            </Alert>
-          ) : null}
-
           {statusCode ? (
             <StatusPage code={statusCode} onHome={() => navigate('/dashboard')} />
           ) : caseKey && patientKey ? (

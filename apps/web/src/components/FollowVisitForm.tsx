@@ -3,7 +3,7 @@ import { Alert } from './ui/alert';
 import { Button } from './ui/button';
 import { FormSheet } from './ui/form-sheet';
 import { splitList } from './CaseForm';
-import { CLINICAL_TABS, ClinicalEntry, clinicalTabIssue, nextClinicalTab, uploadTongue, type ClinicalTab, type ClinicalValue, type TongueDraft } from './ClinicalEntry';
+import { CLINICAL_TABS, ClinicalEntry, clinicalTabIssue, nextClinicalTab, uploadAssist, uploadTongue, visitMediaPayload, type AssistDraft, type ClinicalTab, type ClinicalValue, type TongueDraft } from './ClinicalEntry';
 import { api } from '../lib/api';
 import { pickField } from '../lib/coerce';
 import { kindOf } from '../lib/visit-kind';
@@ -96,6 +96,7 @@ export function FollowVisitForm({
   const [tab, setTab] = useState<ClinicalTab>(focus === 'follow' ? 'plan' : 'chart');
   const [clinical, setClinical] = useState<ClinicalValue>(() => emptyClinical(previous));
   const [tongueFile, setTongueFile] = useState<TongueDraft | null>(null);
+  const [assistFiles, setAssistFiles] = useState<AssistDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -161,6 +162,8 @@ export function FollowVisitForm({
     setSaving(true);
     try {
       const uploaded = await uploadTongue(tongueFile);
+      const assist = await uploadAssist(assistFiles);
+      const files = visitMediaPayload(uploaded, assist);
       await api.addCaseVisit(caseKey, {
         text: currentText(),
         doctorNote: doctorNote || undefined,
@@ -177,9 +180,7 @@ export function FollowVisitForm({
           prescriptions: diagnosis.prescriptions,
           lifestyle: diagnosis.lifestyle,
         },
-        media: uploaded ? [{ kind: 'tongue', name: uploaded.name, url: uploaded.url }] : [],
-        channels: uploaded ? ['image'] : [],
-        aiMode: 'manual',
+        ...files,
         kind: 'return',
         reviewStatus: confirm ? 'confirmed' : 'pending',
         keepSummary: true,
@@ -215,6 +216,8 @@ export function FollowVisitForm({
         onChange={(key, next) => setClinical((prev) => ({ ...prev, [key]: next }))}
         tongue={tongueFile}
         onTongue={setTongueFile}
+        assistFiles={assistFiles}
+        onAssistFiles={setAssistFiles}
         aiAllowed={aiAllowed}
         saving={saving}
       />

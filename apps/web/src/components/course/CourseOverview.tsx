@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { Visit } from '../../types';
+import type { VisitMedia } from '../../lib/visit-display';
 import { CourseCarousel } from './CourseCarousel';
 import { CourseStageCard } from './CourseStageCard';
 import { CourseStageTitle } from './CourseStageTitle';
@@ -11,6 +12,8 @@ export function CourseOverview({
   latestDate,
   initialLines,
   latestLines,
+  initialImages,
+  latestImages,
   visitTotal,
   visits,
 }: {
@@ -18,6 +21,8 @@ export function CourseOverview({
   latestDate: string;
   initialLines: Array<[string, string]>;
   latestLines: Array<[string, string]>;
+  initialImages?: VisitMedia[];
+  latestImages?: VisitMedia[];
   visitTotal: number;
   visits: Visit[];
 }) {
@@ -49,7 +54,7 @@ export function CourseOverview({
       <div className={`hidden transition-[grid-template-rows] duration-300 ease-out lg:grid ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className={`min-h-0 overflow-hidden transition-opacity duration-300 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
           <div className="grid items-stretch gap-4 pt-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,0.9fr)]">
-            {hasInitial ? <CourseStageCard title="期初症状" date={initialDate} lines={initialLines} /> : (
+            {hasInitial ? <CourseStageCard title="期初症状" date={initialDate} lines={initialLines} images={initialImages} /> : (
               <StageEmpty title="期初症状" text="暂无期初症状" />
             )}
             {visits.length > 0 ? (
@@ -57,7 +62,7 @@ export function CourseOverview({
             ) : (
               <StageEmpty heading="经过 0 次治疗" text="暂无治疗记录" />
             )}
-            {hasLatest ? <CourseStageCard title="末期症状" date={latestDate} lines={latestLines} /> : (
+            {hasLatest ? <CourseStageCard title="末期症状" date={latestDate} lines={latestLines} images={latestImages} /> : (
               <StageEmpty title="末期症状" text="暂无末期症状" />
             )}
           </div>
@@ -74,7 +79,7 @@ export function CourseOverview({
             <CourseCarousel
               onIndexChange={setSlide}
               slides={[
-                hasInitial ? <CourseStageCard key="initial" title="期初症状" date={initialDate} lines={initialLines} fill hideTitle embedded /> : null,
+                hasInitial ? <CourseStageCard key="initial" title="期初症状" date={initialDate} lines={initialLines} images={initialImages} fill hideTitle embedded /> : null,
                 visits.length > 0 ? (
                   <CourseTimeline
                     key="course"
@@ -85,7 +90,7 @@ export function CourseOverview({
                     embedded
                   />
                 ) : null,
-                hasLatest ? <CourseStageCard key="latest" title="末期症状" date={latestDate} lines={latestLines} fill hideTitle embedded /> : null,
+                hasLatest ? <CourseStageCard key="latest" title="末期症状" date={latestDate} lines={latestLines} images={latestImages} fill hideTitle embedded /> : null,
               ]}
             />
           </div>

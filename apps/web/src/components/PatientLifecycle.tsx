@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTabUnderline } from './ui/tabs';
 import { Plus } from 'lucide-react';
-import { analysisOf, channelIcons, day, followOf, linesOf, planOf, present, symptomText, text, visitSymptoms } from '../lib/visit-display';
+import { analysisOf, day, followOf, linesOf, planOf, present, symptomText, text, visitAssistMedia, visitImages, visitSymptoms } from '../lib/visit-display';
 import { EmptyState } from './ui/empty-state';
 import { Scrollbar } from './ui/scrollbar';
 import { kindOf, isTreatment, visitLabel, courseEnded } from '../lib/visit-kind';
 import { soleCase } from '../lib/sole-case';
 import { CourseOverview } from './course/CourseOverview';
+import { VisitAssistFile } from './VisitAssistFile';
 
 import type { CaseRecord, Contrast, Patient, Visit } from '../types';
 
@@ -74,12 +75,14 @@ export function PatientLifecycle({
   ]);
   const shownLatest = present(caseVisits.length
     ? [
-      ['摘要', text(current?.latestSummary) || '—'],
       ['症状', latestSymptoms.symptoms || '—'],
       ['舌象', latestSymptoms.tongue || '—'],
       ['脉象', latestSymptoms.pulse || '—'],
     ]
     : []);
+  const firstVisit = caseVisits.find((item) => kindOf(item) === 'first') ?? treatmentVisits[0];
+  const initialImages = visitImages(firstVisit);
+  const latestImages = [...treatmentVisits].reverse().map(visitImages).find((files) => files.length > 0) ?? [];
   const showCourse = Boolean(current) && (shownInitial.length > 0 || shownLatest.length > 0 || caseVisits.length > 0);
   const shown = expanded ? caseVisits : caseVisits.slice(0, 3);
   const caseFollow = current?.treatmentPlan?.followup;
@@ -105,6 +108,8 @@ export function PatientLifecycle({
           latestDate={latestDate}
           initialLines={shownInitial}
           latestLines={shownLatest}
+          initialImages={initialImages}
+          latestImages={latestImages}
           visitTotal={visitTotal}
           visits={caseVisits}
         />
@@ -263,7 +268,7 @@ function PlanTable({
           </thead>
           <tbody>
             {rows.map((item) => {
-              const icons = channelIcons(item.channels ?? []);
+              const files = visitAssistMedia(item);
               return (
                 <tr key={item.id} className="border-t border-slate-100 text-slate-600">
                   <td className="py-3 pr-3">
@@ -272,9 +277,11 @@ function PlanTable({
                   <td className="py-3 pr-3 whitespace-nowrap">{day(item.date)}</td>
                   <td className="max-w-[220px] py-3 pr-3">{planOf(item)}</td>
                   <td className="py-3 pr-3">
-                    <span className="flex gap-2 text-[#1a8f78]">
-                      {icons.map((Icon, index) => <Icon key={index} className="h-4 w-4" strokeWidth={1.75} />)}
-                    </span>
+                    {files.length ? (
+                      <span className="flex flex-col items-start gap-1">
+                        {files.map((file) => <VisitAssistFile key={file.url} file={file} />)}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="max-w-[220px] py-3">{analysisOf(item)}</td>
                 </tr>

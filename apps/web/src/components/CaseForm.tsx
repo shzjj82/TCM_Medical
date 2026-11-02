@@ -3,7 +3,7 @@ import { Alert } from './ui/alert';
 import { Button } from './ui/button';
 import { FormSheet } from './ui/form-sheet';
 import { Input, Label, Textarea } from './ui/input';
-import { CLINICAL_TABS, ClinicalEntry, clinicalTabIssue, nextClinicalTab, uploadTongue, type ClinicalTab, type TongueDraft } from './ClinicalEntry';
+import { CLINICAL_TABS, ClinicalEntry, clinicalTabIssue, nextClinicalTab, uploadAssist, uploadTongue, visitMediaPayload, type AssistDraft, type ClinicalTab, type TongueDraft } from './ClinicalEntry';
 import { api } from '../lib/api';
 
 const controlClass = 'rounded-lg border-slate-200 bg-white shadow-none focus-visible:border-[#175055] focus-visible:ring-0';
@@ -224,6 +224,7 @@ export function CaseForm({ patientKey, aiAllowed = false, onClose, onCreated }: 
   const [form, setForm] = useState(EMPTY_CASE);
   const [tab, setTab] = useState<ClinicalTab>('chart');
   const [tongue, setTongue] = useState<TongueDraft | null>(null);
+  const [assistFiles, setAssistFiles] = useState<AssistDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -271,12 +272,13 @@ export function CaseForm({ patientKey, aiAllowed = false, onClose, onCreated }: 
     setSaving(true);
     try {
       const uploaded = await uploadTongue(tongue);
+      const assist = await uploadAssist(assistFiles);
+      const files = visitMediaPayload(uploaded, assist);
       await api.createCase({
         ...payload,
         firstVisit: {
           text: adviceText(form),
-          media: uploaded ? [{ kind: 'tongue', name: uploaded.name, url: uploaded.url }] : [],
-          channels: uploaded ? ['image'] : [],
+          ...files,
           reviewStatus: confirm ? 'confirmed' : 'pending',
           keepSummary: true,
         },
@@ -284,6 +286,7 @@ export function CaseForm({ patientKey, aiAllowed = false, onClose, onCreated }: 
       if (tongue) URL.revokeObjectURL(tongue.preview);
       setForm(EMPTY_CASE);
       setTongue(null);
+      setAssistFiles([]);
       await onCreated?.();
     } catch (err) { setError(String(err).replace(/^\d+\s*/, '')); }
     finally { setSaving(false); }
@@ -311,6 +314,8 @@ export function CaseForm({ patientKey, aiAllowed = false, onClose, onCreated }: 
         onChange={update}
         tongue={tongue}
         onTongue={setTongue}
+        assistFiles={assistFiles}
+        onAssistFiles={setAssistFiles}
         aiAllowed={aiAllowed}
         saving={saving}
       />
