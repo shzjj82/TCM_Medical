@@ -422,11 +422,12 @@ function AssistDialog({
                 <VoiceIntake
                   mode="record"
                   layout="center"
+                  fillFields={false}
                   disabled={!aiAllowed || busy}
                   blockedReason={blocked}
-                  onDraft={(_draft, transcript, file) => {
+                  onDraft={async (_draft, transcript, file) => {
                     if (file && transcript.trim()) onAssistFile({ name: file.name, file, kind: 'voice' });
-                    if (transcript.trim()) void fromTranscript(transcript);
+                    if (transcript.trim()) await fromTranscript(transcript);
                   }}
                 />
               ) : null}
@@ -453,11 +454,12 @@ function AssistDialog({
                 <VoiceIntake
                   mode="upload"
                   layout="center"
+                  fillFields={false}
                   disabled={!aiAllowed || busy}
                   blockedReason={blocked}
-                  onDraft={(_draft, transcript, file) => {
+                  onDraft={async (_draft, transcript, file) => {
                     if (file && transcript.trim()) onAssistFile({ name: file.name, file, kind: 'audio' });
-                    if (transcript.trim()) void fromTranscript(transcript);
+                    if (transcript.trim()) await fromTranscript(transcript);
                   }}
                 />
               ) : null}

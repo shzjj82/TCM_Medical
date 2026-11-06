@@ -16,6 +16,7 @@ export function CourseOverview({
   latestImages,
   visitTotal,
   visits,
+  onChat,
 }: {
   initialDate: string;
   latestDate: string;
@@ -25,6 +26,7 @@ export function CourseOverview({
   latestImages?: VisitMedia[];
   visitTotal: number;
   visits: Visit[];
+  onChat?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [slide, setSlide] = useState(0);
@@ -50,6 +52,11 @@ export function CourseOverview({
           {visitTotal > 0 ? <span className="shrink-0">经过 {visitTotal} 次治疗</span> : null}
           {hasLatest ? <span className="shrink-0">末期 {latestDate}</span> : null}
         </span>
+        {onChat ? (
+          <button type="button" className="ml-auto shrink-0 text-sm text-[#1a8f78] hover:underline" onClick={onChat}>
+            与 AI 讨论
+          </button>
+        ) : null}
       </div>
       <div className={`hidden transition-[grid-template-rows] duration-300 ease-out lg:grid ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className={`min-h-0 overflow-hidden transition-opacity duration-300 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
@@ -72,7 +79,12 @@ export function CourseOverview({
       <div className={`rounded-2xl bg-[#f4fbf9] lg:hidden ${open ? 'pb-1' : 'pb-3'}`}>
         <div className="flex items-center gap-2 px-4 pt-3">
           <Toggle open={open} onToggle={() => setOpen((value) => !value)} />
-          {open && caption ? <CourseStageTitle title={caption.title} date={caption.date} className="ml-auto" /> : null}
+          {open && caption ? <CourseStageTitle title={caption.title} date={caption.date} className="min-w-0 flex-1" /> : <span className="flex-1" />}
+          {onChat ? (
+            <button type="button" className="shrink-0 text-xs text-[#1a8f78]" onClick={onChat}>
+              与 AI 讨论
+            </button>
+          ) : null}
         </div>
         <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
           <div className={`min-h-0 overflow-hidden transition-opacity duration-300 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Mic, Plus, MessageSquare } from 'lucide-react';
+import { Plus, MessageSquare } from 'lucide-react';
 import { Alert } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { FormSheet } from '../components/ui/form-sheet';
@@ -78,11 +78,8 @@ export function DashboardPage({ userName, onOpenPatient, onOpenList, onOpenKnowl
           <p className="mt-1 text-xs text-slate-400">{greeting}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button onClick={() => setIntake('create')}>
+          <Button onClick={() => setIntake(true)}>
             <Plus className="h-4 w-4" />快速新建患者
-          </Button>
-          <Button variant="outline" className="border-slate-200" onClick={() => setIntake('voice')}>
-            <Mic className="h-4 w-4" />快速录音
           </Button>
           <Button variant="outline" className="border-slate-200" onClick={onChat}>
             <MessageSquare className="h-4 w-4" />AI 助手
@@ -163,13 +160,13 @@ export function DashboardPage({ userName, onOpenPatient, onOpenList, onOpenKnowl
       </div>
 
       <FormSheet
-        open={Boolean(intake)}
-        title={intake === 'voice' ? '快速录音 · 建立病患档案' : '快速新建患者'}
-        onClose={() => setIntake(null)}
+        open={intake}
+        title="快速新建患者"
+        onClose={() => setIntake(false)}
       >
         <IntakeForm
           onCreated={async () => {
-            setIntake(null);
+            setIntake(false);
             await load();
           }}
         />

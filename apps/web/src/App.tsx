@@ -14,7 +14,7 @@ import { PatientsPage } from './pages/PatientsPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { StatusPage } from './pages/StatusPage';
 import { api } from './lib/api';
-import { casePath, patientPath, savedListHref, useAppRoute } from './lib/route';
+import { casePath, chatHref, patientPath, savedListHref, useAppRoute } from './lib/route';
 import { clearSession, greetingFor, readSession, rememberReturn, takeReturn, writeSession } from './lib/session';
 import type { SessionUser } from './types';
 

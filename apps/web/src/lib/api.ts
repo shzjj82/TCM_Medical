@@ -311,12 +311,25 @@ export const api = {
     return request<{ url: string; name: string }>('/files/assist', { method: 'POST', body });
   },
 
-  /** 上传录音，返回转写和拆好的主诉字段。不直接建档。 */
-  transcribeIntake: (payload: { audioBase64: string; mime: string }) =>
-    request<{ transcript: string; fields: Record<string, unknown> }>('/ai/intake-audio', {
+  /** 超过 8MB 的音频直传对象存储，返回听悟可读地址。 */
+  uploadAudio: (file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('name', file.name);
+    return request<{ url: string; name: string; key: string }>('/files/audio', { method: 'POST', body });
+  },
+
+  /** 上传录音。短录音直接返回转写；长音频走听悟时先返回任务号。 */
+  transcribeIntake: (payload: { audioBase64?: string; mime?: string; fileUrl?: string; provider?: string; transcript?: string }) =>
+    request<{ transcript?: string; fields?: Record<string, unknown>; jobId?: string; status?: string; provider?: string }>('/ai/intake-audio', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  getMediaJob: (id: string) =>
+    request<{ jobId: string; status: string; provider?: string; transcript?: string; error?: string }>(
+      `/ai/jobs/${encodeURIComponent(id)}`,
+    ),
 
   searchKnowledge: (scope: 'external' | 'internal', q: string, topK = 8) =>
     request<Array<Record<string, unknown>>>(`/knowledge/${scope}${qs({ q, topK })}`),

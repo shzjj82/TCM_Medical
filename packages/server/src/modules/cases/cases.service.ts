@@ -87,15 +87,11 @@ function assertCourse(prior: Visit[], kind: VisitKind) {
   if (kinds.includes('close')) throw new BadRequestException('档案已结案，不能再添加记录');
   if (kinds.includes('refer')) throw new BadRequestException('档案已转诊，不能再添加记录');
   const hasFirst = kinds.includes('first');
-  const hasReturn = kinds.includes('return');
   if (kind === 'first') {
     if (hasFirst) throw new BadRequestException('已有初诊，请添加复诊');
     return;
   }
   if (!hasFirst) throw new BadRequestException('请先完成初诊');
-  if ((kind === 'close' || kind === 'refer') && !hasReturn) {
-    throw new BadRequestException('请先记录复诊，再结案或转诊');
-  }
 }
 
 /** 由档案 + 治疗记录计算「期初 → N 次治疗 → 末期」对比，前端只读不算。 */

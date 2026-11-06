@@ -108,16 +108,27 @@ export function savedListHref(): string {
   return '/patients';
 }
 
+export function chatHref(patientKey?: string): string {
+  if (!patientKey) return '/chat';
+  return `/chat?patient=${encodeURIComponent(patientKey)}`;
+}
+
 export function useAppRoute() {
   const [route, setRoute] = useState(() => parseRoute());
+  const [search, setSearch] = useState(() => window.location.search);
   useEffect(() => {
-    const onPop = () => setRoute(parseRoute());
+    const onPop = () => {
+      setRoute(parseRoute());
+      setSearch(window.location.search);
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   const navigate = useCallback((path: string, replace = false) => {
-    window.history[replace ? 'replaceState' : 'pushState'](null, '', path);
-    setRoute(parseRoute(new URL(path, window.location.origin).pathname));
+    const url = new URL(path, window.location.origin);
+    window.history[replace ? 'replaceState' : 'pushState'](null, '', `${url.pathname}${url.search}${url.hash}`);
+    setRoute(parseRoute(url.pathname));
+    setSearch(url.search);
   }, []);
-  return { route, navigate };
+  return { route, search, navigate };
 }

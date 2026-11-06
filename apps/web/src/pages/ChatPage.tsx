@@ -7,9 +7,9 @@ import { Checkbox } from '../components/ui/checkbox';
 import { EmptyState } from '../components/ui/empty-state';
 import { FormSheet } from '../components/ui/form-sheet';
 import { ChatReplySkeleton } from '../components/ui/skeleton';
-import { Input, Textarea } from '../components/ui/input';
-import { Popover, PopoverAnchor, PopoverContent } from '../components/ui/popover';
+import { Textarea } from '../components/ui/input';
 import { Scrollbar } from '../components/ui/scrollbar';
+import { PatientPick, patientKeyOf } from '../components/PatientPick';
 import { api, type ChatReply } from '../lib/api';
 import { readThreads, removeThread, titleFrom, upsertThread, type ChatThread } from '../lib/chat-history';
 import type { Patient } from '../types';
@@ -40,7 +40,7 @@ const controlClass = 'rounded-lg border-slate-200 bg-white shadow-none focus-vis
 const DESKTOP_QUERY = '(min-width: 768px)';
 
 /** 按 PRD：指定患者 / 知识库范围 / 回答模式，回答带来源和风险提示。 */
-export function ChatPage() {
+export function ChatPage({ patientKey }: { patientKey?: string | null }) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [scopes, setScopes] = useState<Scopes>({ patient: false, internal: true, external: true });
   const [answerMode, setAnswerMode] = useState<AnswerMode>('summary');
@@ -73,8 +73,22 @@ export function ChatPage() {
   }, [messages, busy]);
 
   useEffect(() => {
-    setScopes((current) => ({ ...current, patient: Boolean(patient) && current.patient }));
+    if (!patient) setScopes((current) => ({ ...current, patient: false }));
   }, [patient]);
+
+  useEffect(() => {
+    const key = patientKey?.trim();
+    if (!key) return;
+    let cancelled = false;
+    api.getPatient(key).then((row) => {
+      if (cancelled) return;
+      setPatient(row);
+      setScopes((current) => ({ ...current, patient: true }));
+    }).catch(() => {
+      if (!cancelled) setError('没有找到该患者，请在设置里重新指定');
+    });
+    return () => { cancelled = true; };
+  }, [patientKey]);
 
   function persist(next: Message[]) {
     if (next.length === 0) return;
@@ -155,7 +169,7 @@ export function ChatPage() {
       const reply = await api.chatStream({
         message: text,
         history,
-        patientId: scopes.patient ? (patient?.externalId ?? patient?.id) : undefined,
+        patientId: scopes.patient && patient ? patientKeyOf(patient) : undefined,
         scopes,
         answerMode,
       }, (event) => {
@@ -329,6 +343,8 @@ export function ChatPage() {
           }, sidebarOpen)}
         </div>
 
+        <p className="mt-2 shrink-0 truncate text-xs text-slate-500 md:mt-3">{contextLine(patient, scopes, answerMode)}</p>
+
         <Scrollbar className="mt-3 min-h-0 flex-1 md:mt-4" viewportClassName="flex min-h-full flex-col gap-3 pb-2">
           {messages.length === 0 ? (
             <div className="flex flex-1 flex-col justify-center py-10 text-center">
@@ -399,6 +415,17 @@ export function ChatPage() {
       </FormSheet>
     </div>
   );
+}
+
+function contextLine(patient: Patient | null, scopes: Scopes, answerMode: AnswerMode): string {
+  const who = patient && scopes.patient ? `患者：${patient.name}` : '未指定患者';
+  const parts: string[] = [];
+  if (patient && scopes.patient) parts.push('患者记录');
+  if (scopes.internal) parts.push('内部库');
+  if (scopes.external) parts.push('外部库');
+  const range = parts.length ? parts.join(' + ') : '无本地资料';
+  const mode = MODES.find((item) => item.id === answerMode)?.label ?? '';
+  return `${who} · 范围：${range} · 模式：${mode}`;
 }
 
 function formatWhen(value: string): string {
@@ -541,75 +568,3 @@ function ScopeCheck({
   );
 }
 
-function PatientPick({ value, onChange }: { value: Patient | null; onChange: (next: Patient | null) => void }) {
-  const [keyword, setKeyword] = useState('');
-  const [open, setOpen] = useState(false);
-  const [rows, setRows] = useState<Patient[]>([]);
-
-  useEffect(() => {
-    if (!open) return;
-    const timer = window.setTimeout(() => {
-      api.listPatients({ keyword: keyword.trim() || undefined, page: 1, pageSize: 8 })
-        .then((result) => setRows(result.items))
-        .catch(() => setRows([]));
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [keyword, open]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverAnchor asChild>
-        <div className="relative">
-          <Input
-            className={`${controlClass} bg-white`}
-            value={open ? keyword : (value ? `${value.name}${value.gender ? ` ${value.gender}` : ''}${value.age ? ` ${value.age}岁` : ''}` : '')}
-            placeholder="搜索并指定患者，可不选"
-            onChange={(event) => {
-              setKeyword(event.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => {
-              setKeyword('');
-              setOpen(true);
-            }}
-          />
-          {value && !open ? (
-            <button type="button" className="absolute right-3 top-2 text-xs text-[#175055]" onClick={() => onChange(null)}>
-              清除
-            </button>
-          ) : null}
-        </div>
-      </PopoverAnchor>
-      <PopoverContent
-        align="start"
-        sideOffset={4}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        className="w-[var(--radix-popper-anchor-width)] p-1"
-      >
-        <ul className="max-h-44 overflow-auto">
-          {rows.length === 0 ? (
-            <li className="px-2 py-1.5 text-sm text-slate-400">没有匹配患者</li>
-          ) : rows.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                className="block w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-[#f4fbf9]"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onChange(item);
-                  setOpen(false);
-                }}
-              >
-                {item.name}
-                <span className="ml-2 text-xs text-slate-400">
-                  {[item.gender, item.age ? `${item.age}岁` : ''].filter(Boolean).join(' ')}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
-  );
-}

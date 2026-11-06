@@ -39,11 +39,13 @@ export function PatientLifecycle({
   patient,
   onOpenCase,
   onAdd,
+  onChat,
   className = '',
 }: {
   patient: Patient;
   onOpenCase: (caseKey: string) => void;
   onAdd?: (action: LifecycleAdd, caseKey?: string) => void;
+  onChat?: () => void;
   className?: string;
 }) {
   const current = soleCase(patient.cases ?? []);
@@ -96,7 +98,6 @@ export function PatientLifecycle({
   ];
   const ended = courseEnded(current, caseVisits);
   const hasFirst = caseVisits.some((item) => kindOf(item) === 'first');
-  const hasReturn = caseVisits.some((item) => kindOf(item) === 'return');
   const addTab = tab === 'record' ? (current ? undefined : 'intake') : ADDABLE[tab];
   const showAdd = Boolean(onAdd && addTab && !(addTab !== 'intake' && ended));
 
@@ -112,6 +113,7 @@ export function PatientLifecycle({
           latestImages={latestImages}
           visitTotal={visitTotal}
           visits={caseVisits}
+          onChat={onChat}
         />
       ) : null}
 
@@ -154,8 +156,8 @@ export function PatientLifecycle({
               {showAdd && planMenu && tab === 'plan' ? (
                 <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-sm">
                   {PLAN_ACTIONS.map((item) => {
-                    const enabled = !current || (item.id === 'return' ? hasFirst : hasFirst && hasReturn);
-                    const hint = !hasFirst ? '请先完成初诊' : item.id !== 'return' && !hasReturn ? '请先记录复诊' : '';
+                    const enabled = !current || hasFirst;
+                    const hint = !hasFirst ? '请先完成初诊' : '';
                     return (
                       <button
                         key={item.id}
@@ -228,6 +230,7 @@ function RecordPane({ record }: { record?: CaseRecord }) {
     ['取穴', (plan?.acupoints ?? []).join('、')],
     ['方剂', (plan?.prescriptions ?? []).join('、')],
     ['调摄', (plan?.lifestyle ?? []).join('、')],
+    ['方案确认', plan?.aiDecision === 'adopted' ? '已采纳' : plan?.aiDecision === 'rejected' ? '不采纳' : plan?.aiDecision === 'edited' ? '修改后采用' : ''],
   ]);
   if (rows.length === 0) return <EmptyState text="暂无病历详情" />;
   return (

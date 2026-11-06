@@ -44,6 +44,66 @@ function readFile(file: File): Promise<string> {
   });
 }
 
+/** 不超过该大小走同步识别；更大的先上传再交给听悟。 */
+const ASR_MAX_BYTES = 8 * 1024 * 1024;
+const AUDIO_MAX_BYTES = 100 * 1024 * 1024;
+
+type Phase = 'upload' | 'transcribe' | 'extract';
+
+const PHASES: Record<'tingwu' | 'asr', Array<{ id: Phase; title: string; detail: string }>> = {
+  tingwu: [
+    { id: 'upload', title: '上传到云端', detail: '录音先存到云端，听悟才能读取这段音频。' },
+    { id: 'transcribe', title: '听悟转写', detail: '通义听悟正在听录音。文件越长，这一步越久。' },
+    { id: 'extract', title: '整理字段', detail: '把转写内容填回当前页，请核对后再保存。' },
+  ],
+  asr: [
+    { id: 'transcribe', title: '识别语音', detail: '正在听这段短录音，并转成文字。' },
+    { id: 'extract', title: '整理字段', detail: '把识别内容填回当前页，请核对后再保存。' },
+  ],
+};
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function ParseSteps({ pipeline, phase }: { pipeline: 'tingwu' | 'asr'; phase: Phase }) {
+  const steps = PHASES[pipeline];
+  const index = Math.max(0, steps.findIndex((step) => step.id === phase));
+  return (
+    <ol className="mx-auto mt-4 max-w-sm space-y-3 text-left">
+      {steps.map((step, i) => {
+        const state = i < index ? 'done' : i === index ? 'active' : 'wait';
+        return (
+          <li key={step.id} className="flex gap-3">
+            <span
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
+                state === 'active' ? 'bg-[#e7f6f2] text-[#0f766e]' : state === 'done' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-300'
+              }`}
+            >
+              {state === 'active' ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#d7efe8] border-t-[#0f766e]" />
+              ) : (
+                i + 1
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-sm ${state === 'wait' ? 'text-slate-300' : 'text-slate-700'}`}>{step.title}</span>
+              {state === 'active' ? (
+                <>
+                  <span className="mt-0.5 block text-xs leading-5 text-slate-500">{step.detail}</span>
+                  <span className="mt-2 block h-1 overflow-hidden rounded-full bg-slate-100">
+                    <span className="block h-full w-1/2 animate-pulse rounded-full bg-[#0f766e]" />
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function draftFromFields(fields: Record<string, unknown>): IntakeDraft {
   const text = (key: (typeof TEXT_KEYS)[number]) => (typeof fields[key] === 'string' ? fields[key] : '');
   return {
@@ -67,17 +127,22 @@ export function VoiceIntake({
   onDraft,
   mode = 'both',
   layout = 'panel',
+  fillFields = true,
 }: {
   disabled?: boolean;
   blockedReason?: string;
-  onDraft: (draft: IntakeDraft, transcript: string, file?: File) => void;
+  onDraft: (draft: IntakeDraft, transcript: string, file?: File) => void | Promise<void>;
   /** record 只录音，upload 只上传音频，both 两个都有。 */
   mode?: 'record' | 'upload' | 'both';
   /** center 与文件解析一样，只把按钮放在中间。 */
   layout?: 'panel' | 'center';
+  /** 为 false 时只交出转写，由调用方整理当前页字段。 */
+  fillFields?: boolean;
 }) {
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase | null>(null);
+  const [pipeline, setPipeline] = useState<'tingwu' | 'asr'>('asr');
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
   const recorder = useRef<MediaRecorder | null>(null);
@@ -85,18 +150,64 @@ export function VoiceIntake({
   const timer = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  async function waitTranscript(jobId: string) {
+    const started = Date.now();
+    while (Date.now() - started < 20 * 60 * 1000) {
+      const job = await api.getMediaJob(jobId);
+      if (job.status === 'done') {
+        const text = (job.transcript ?? '').trim();
+        if (!text) throw new Error('没有识别到语音内容');
+        return text;
+      }
+      if (job.status === 'failed') throw new Error(job.error || '转写失败');
+      await sleep(3000);
+    }
+    throw new Error('转写时间较长，请稍后重试');
+  }
+
+  async function finish(transcript: string, fields: Record<string, unknown> | undefined, file: File) {
+    setPhase('extract');
+    const draft = fields ? draftFromFields(fields) : fillFields
+      ? draftFromFields((await api.transcribeIntake({ transcript })).fields ?? {})
+      : {};
+    setTranscript(transcript);
+    await onDraft(draft, transcript, file);
+  }
+
   async function recognize(file: File) {
+    const via: 'tingwu' | 'asr' = file.size > ASR_MAX_BYTES ? 'tingwu' : 'asr';
     setBusy(true);
     setError(null);
+    setTranscript('');
+    setPipeline(via);
+    setPhase(via === 'tingwu' ? 'upload' : 'transcribe');
     try {
-      const audioBase64 = await readFile(file);
-      const result = await api.transcribeIntake({ audioBase64, mime: file.type || 'audio/webm' });
-      setTranscript(result.transcript);
-      onDraft(draftFromFields(result.fields), result.transcript, file);
+      if (file.size > AUDIO_MAX_BYTES) throw new Error('音频请控制在 100MB 以内');
+      if (via === 'tingwu') {
+        const stored = await api.uploadAudio(file);
+        setPhase('transcribe');
+        const result = await api.transcribeIntake({
+          fileUrl: stored.url,
+          mime: file.type || 'audio/mpeg',
+          provider: 'tingwu',
+        });
+        const transcript = result.jobId && !result.transcript
+          ? await waitTranscript(result.jobId)
+          : (result.transcript ?? '').trim();
+        if (!transcript) throw new Error('没有识别到语音内容');
+        await finish(transcript, result.fields, file);
+      } else {
+        const audioBase64 = await readFile(file);
+        const result = await api.transcribeIntake({ audioBase64, mime: file.type || 'audio/webm' });
+        const transcript = (result.transcript ?? '').trim();
+        if (!transcript) throw new Error('没有识别到语音内容');
+        await finish(transcript, result.fields, file);
+      }
     } catch (err) {
       setError(String(err).replace(/^\d+\s*/, '').replace(/^Error:\s*/, ''));
     } finally {
       setBusy(false);
+      setPhase(null);
     }
   }
 
@@ -148,13 +259,13 @@ export function VoiceIntake({
       </Button>
     ) : (
       <Button type="button" variant="outline" className="border-slate-200" onClick={() => void start()} disabled={disabled || busy}>
-        <Mic className="h-3.5 w-3.5" />{busy ? '识别中…' : '录音'}
+        <Mic className="h-3.5 w-3.5" />录音
       </Button>
     )
   ) : null;
   const uploadButton = mode !== 'record' ? (
     <Button type="button" variant="outline" className="border-slate-200" onClick={() => fileRef.current?.click()} disabled={disabled || busy || recording}>
-      <Upload className="h-3.5 w-3.5" />{busy && mode === 'upload' ? '识别中…' : '上传音频'}
+      <Upload className="h-3.5 w-3.5" />上传音频
     </Button>
   ) : null;
   const fileInput = (
@@ -178,7 +289,8 @@ export function VoiceIntake({
         {uploadButton}
         {fileInput}
         {blockedReason ? <p className="mt-2 text-xs text-slate-400">{blockedReason}</p> : null}
-        {transcript ? <p className="mt-2 text-xs leading-5 text-slate-600">转写：{transcript}</p> : null}
+        {phase ? <ParseSteps pipeline={pipeline} phase={phase} /> : null}
+        {transcript ? <p className="mt-2 line-clamp-4 text-xs leading-5 text-slate-600">转写：{transcript}</p> : null}
         {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
       </div>
     );
@@ -191,10 +303,11 @@ export function VoiceIntake({
         {uploadButton}
         {fileInput}
         <span className="text-xs text-slate-400">
-          {blockedReason || (recording ? '正在录音，最长 3 分钟' : mode === 'upload' ? '上传后识别，结果填回当前页' : '识别结果请核对后再保存')}
+          {blockedReason || (recording ? '正在录音，最长 3 分钟' : mode === 'upload' ? '8MB 以内直接识别，更大的先上传再转写' : '识别结果请核对后再保存')}
         </span>
       </div>
-      {transcript ? <p className="mt-2 text-xs leading-5 text-slate-600">转写：{transcript}</p> : null}
+      {phase ? <ParseSteps pipeline={pipeline} phase={phase} /> : null}
+      {transcript ? <p className="mt-2 line-clamp-4 text-xs leading-5 text-slate-600">转写：{transcript}</p> : null}
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  BookOpen, LayoutGrid, LogOut, MessageSquare, User, UserRound,
+  BookOpen, LayoutGrid, LogOut, MessageSquare, Sparkles, User, UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import type { SessionUser } from '../types';
@@ -16,6 +16,7 @@ export const NAV: Array<{ key: PageKey | 'soon'; label: string; icon: LucideIcon
   { key: 'patients', label: '患者管理', icon: UserRound, enabled: true },
   { key: 'knowledge', label: '知识库', icon: BookOpen, enabled: true },
   { key: 'chat', label: 'AI 对话', icon: MessageSquare, enabled: true },
+  { key: 'advise', label: '智能推荐', icon: Sparkles, enabled: true },
 ];
 
 export function ClinicMark() {

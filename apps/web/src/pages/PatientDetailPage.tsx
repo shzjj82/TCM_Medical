@@ -22,10 +22,11 @@ interface Props {
   patientKey: string;
   onBack: () => void;
   onOpenCase: (caseKey: string) => void;
+  onChat: (patientKey: string) => void;
 }
 
 /** 病患详情：全生命周期对比 + 病历与诊疗记录。 */
-export function PatientDetailPage({ patientKey, onBack, onOpenCase }: Props) {
+export function PatientDetailPage({ patientKey, onBack, onOpenCase, onChat }: Props) {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +86,7 @@ export function PatientDetailPage({ patientKey, onBack, onOpenCase }: Props) {
   const visitLabel = current ? '复诊' : '初诊';
   const showVisitAction = !current || !ended;
   const showClose = Boolean(current && !ended);
-  const showActions = showVisitAction || showClose;
+  const showActions = true;
   const openVisitAction = () => {
     if (!current) openAdd('intake');
     else openAdd('return', current.externalId ?? current.id);
@@ -98,6 +99,9 @@ export function PatientDetailPage({ patientKey, onBack, onOpenCase }: Props) {
           结案
         </Button>
       ) : null}
+      <Button size="sm" variant="outline" className="border-slate-200" onClick={() => onChat(patient.externalId ?? patient.id)}>
+        与 AI 讨论
+      </Button>
     </div>
   );
 
@@ -117,6 +121,7 @@ export function PatientDetailPage({ patientKey, onBack, onOpenCase }: Props) {
         patient={patient}
         onOpenCase={onOpenCase}
         onAdd={(action, caseKey) => openAdd(action, caseKey)}
+        onChat={() => onChat(patient.externalId ?? patient.id)}
       />
       {showEdit ? (
         <PatientEditForm
@@ -146,6 +151,13 @@ export function PatientDetailPage({ patientKey, onBack, onOpenCase }: Props) {
         <CourseRecordForm
           mode={recordMode}
           caseKey={recordCase.externalId ?? recordCase.id}
+          initialSummary={[
+            recordCase.chiefComplaint,
+            recordCase.presentIllness,
+            recordCase.tongue ? `舌象：${recordCase.tongue}` : '',
+            recordCase.pulse ? `脉象：${recordCase.pulse}` : '',
+            (recordCase.symptoms ?? []).filter(Boolean).length ? `症状：${(recordCase.symptoms ?? []).filter(Boolean).join('、')}` : '',
+          ].filter(Boolean).join('\n')}
           onClose={() => setRecordMode(null)}
           onSaved={async () => { setRecordMode(null); await load(); }}
         />

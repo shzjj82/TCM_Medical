@@ -74,6 +74,8 @@ export interface TreatmentPlan {
   prescriptions?: string[];
   lifestyle?: string[];
   followup?: { date?: string; note?: string };
+  aiDecision?: 'adopted' | 'rejected' | 'edited';
+  aiDecidedAt?: string;
 }
 
 export interface CaseHistory {

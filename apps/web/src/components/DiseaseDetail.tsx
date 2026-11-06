@@ -312,6 +312,11 @@ export function DiseaseDetail({ record, patient, archived, hasPlan, onBack, onRe
                 {plan.lifestyle?.length ? (
                   <p className="mt-1 text-xs text-slate-500">调摄 {plan.lifestyle.join('、')}</p>
                 ) : null}
+                {plan.aiDecision ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    方案确认 {plan.aiDecision === 'adopted' ? '已采纳' : plan.aiDecision === 'rejected' ? '不采纳' : '修改后采用'}
+                  </p>
+                ) : null}
                 {!hasPlan ? <p className="mt-2 text-xs text-amber-700">归档前需要至少一条就诊方案。</p> : null}
               </div>
             </div>

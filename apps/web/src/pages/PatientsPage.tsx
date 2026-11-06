@@ -195,8 +195,9 @@ export function PatientsPage({ onOpen }: Props) {
 
       <PatientViewTabs query={query} onChange={patchQuery} />
 
-      <FormSheet open={showIntake} title="初始录入 · 建立病患档案" onClose={() => setShowIntake(false)}>
+      <FormSheet open={showIntake} title="建立病患档案" onClose={() => setShowIntake(false)}>
         <IntakeForm
+          patientOnly
           onCreated={() => {
             setShowIntake(false);
             if (query.page !== 1) commitQuery({ ...query, page: 1 }, 'replace');
